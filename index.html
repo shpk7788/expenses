@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expenses</title>
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #111827; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #0f766e; --accent-ink: #ffffff; --danger: #b91c1c;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f14; --card: #151b23; --text: #e5e7eb; --muted: #9ca3af;
+      --line: #263040; --accent: #14b8a6; --accent-ink: #04201d; --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin: 8px 0 16px; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .summary div span { display: block; color: var(--muted); font-size: .8rem; }
+  .summary div strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+  form { display: grid; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+  input {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px; width: 100%;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button {
+    font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink); font-weight: 600;
+  }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; padding: 8px 12px; font-size: .85rem; }
+  .month { margin-top: 8px; }
+  .month-head { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; padding: 4px 4px 8px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  .date { color: var(--muted); font-size: .8rem; width: 3.2em; text-align: center; line-height: 1.1; }
+  .date b { display: block; font-size: 1.1rem; color: var(--text); }
+  .what { overflow-wrap: anywhere; }
+  .amt { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .icon-btn { background: transparent; color: var(--muted); padding: 6px 8px; font-weight: 400; }
+  .icon-btn:hover { color: var(--danger); }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .search { margin-bottom: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .9rem; display: none; gap: 12px; align-items: center; }
+  .toast button { background: transparent; color: var(--bg); padding: 0; text-decoration: underline; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Expenses</h1>
+    <div class="tools">
+      <button class="ghost" id="exportBtn" type="button">Export CSV</button>
+      <button class="ghost" id="importBtn" type="button">Import</button>
+      <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+    </div>
+  </header>
+
+  <section class="card summary">
+    <div><span id="monthLabel">This month</span><strong id="monthTotal">₹0</strong></div>
+    <div><span>Today</span><strong id="todayTotal">₹0</strong></div>
+  </section>
+
+  <section class="card">
+    <form id="form" autocomplete="off">
+      <label>What was it for?
+        <input id="what" required placeholder="e.g. Groceries" list="suggestions" enterkeyhint="next">
+        <datalist id="suggestions"></datalist>
+      </label>
+      <div class="row">
+        <label>Amount (₹)
+          <input id="amount" type="number" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
+        </label>
+        <label>Date
+          <input id="date" type="date" required>
+        </label>
+      </div>
+      <button type="submit">Add expense</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <input class="search" id="search" type="search" placeholder="Search expenses">
+    <div id="list"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
+
+<script>
+(() => {
+  const KEY = "expenses.v1";
+  const $ = (id) => document.getElementById(id);
+  const fmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
+
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {} };
+  let items = load();
+  let lastDeleted = null, toastTimer = null;
+
+  const today = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  const resetDate = () => { $("date").value = today(); };
+
+  function render() {
+    const q = $("search").value.trim().toLowerCase();
+    const t = today(), m = t.slice(0, 7);
+    $("monthTotal").textContent = fmt.format(items.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
+    $("todayTotal").textContent = fmt.format(items.filter(e => e.date === t).reduce((s, e) => s + e.amount, 0));
+    $("monthLabel").textContent = new Date(t + "T00:00").toLocaleDateString(undefined, { month: "long" });
+
+    const names = [...new Set(items.map(e => e.what))].slice(0, 50);
+    $("suggestions").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+
+    const shown = items
+      .filter(e => !q || e.what.toLowerCase().includes(q))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+
+    if (!shown.length) {
+      $("list").innerHTML = `<p class="empty">${items.length ? "No matches." : "No expenses yet. Add your first one above."}</p>`;
+      return;
+    }
+    const groups = {};
+    shown.forEach(e => (groups[e.date.slice(0, 7)] ||= []).push(e));
+    $("list").innerHTML = Object.entries(groups).map(([month, list]) => {
+      const total = list.reduce((s, e) => s + e.amount, 0);
+      const label = new Date(month + "-01T00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      return `<div class="month">
+        <div class="month-head"><span>${label}</span><span>${fmt.format(total)}</span></div>
+        <ul>${list.map(e => {
+          const d = new Date(e.date + "T00:00");
+          return `<li>
+            <div class="date"><b>${d.getDate()}</b>${d.toLocaleDateString(undefined, { weekday: "short" })}</div>
+            <div class="what">${esc(e.what)}</div>
+            <div class="amt">${fmt.format(e.amount)}</div>
+            <button class="icon-btn" data-del="${e.id}" aria-label="Delete">✕</button>
+          </li>`;
+        }).join("")}</ul></div>`;
+    }).join("");
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  function toast(msg, undo) {
+    $("toastMsg").textContent = msg;
+    $("undoBtn").style.display = undo ? "" : "none";
+    $("toast").style.display = "flex";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $("toast").style.display = "none"; lastDeleted = null; }, 4000);
+  }
+
+  $("form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const amount = parseFloat($("amount").value);
+    const what = $("what").value.trim();
+    if (!what || !(amount > 0)) return;
+    items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), date: $("date").value || today(), what, amount: Math.round(amount * 100) / 100, created: Date.now() });
+    save(); render();
+    $("what").value = ""; $("amount").value = ""; resetDate();
+    $("what").focus();
+    toast("Added");
+  });
+
+  $("list").addEventListener("click", (ev) => {
+    const id = ev.target.closest("[data-del]")?.dataset.del;
+    if (!id) return;
+    const i = items.findIndex(e => e.id === id);
+    if (i < 0) return;
+    lastDeleted = items.splice(i, 1)[0];
+    save(); render();
+    toast("Deleted", true);
+  });
+
+  $("undoBtn").addEventListener("click", () => {
+    if (lastDeleted) { items.push(lastDeleted); lastDeleted = null; save(); render(); }
+    $("toast").style.display = "none";
+  });
+
+  $("search").addEventListener("input", render);
+
+  $("exportBtn").addEventListener("click", () => {
+    const rows = [["date", "what", "amount"], ...[...items].sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, e.what, e.amount])];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `expenses-${today()}.csv`;
+    a.click();
+  });
+
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0]; if (!file) return;
+    const lines = parseCSV(await file.text());
+    let added = 0;
+    const seen = new Set(items.map(e => `${e.date}|${e.what}|${e.amount}`));
+    lines.slice(1).forEach(([date, what, amount]) => {
+      const amt = parseFloat(amount);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !what || !(amt > 0)) return;
+      const k = `${date}|${what}|${amt}`; if (seen.has(k)) return; seen.add(k);
+      items.push({ id: String(Date.now() + Math.random()), date, what, amount: amt, created: Date.now() });
+      added++;
+    });
+    save(); render(); ev.target.value = "";
+    toast(`Imported ${added} expense${added === 1 ? "" : "s"}`);
+  });
+
+  function parseCSV(text) {
+    const rows = []; let row = [], cur = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { row.push(cur); cur = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; }
+      else cur += c;
+    }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+
+  // Keep the date on "today" if the app is left open past midnight
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("amount").value && !$("what").value) { resetDate(); render(); } });
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  resetDate(); render();
+})();
+</script>
+</body>
+</html>
