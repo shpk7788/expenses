@@ -61,6 +61,29 @@
   .empty { color: var(--muted); text-align: center; padding: 24px 0; }
   .tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .search { margin-bottom: 8px; }
+  li.item { cursor: pointer; }
+  li.item:hover .what { text-decoration: underline; text-decoration-color: var(--line); }
+  li.editing { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px; }
+  .form-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .form-head h2 { font-size: 1rem; margin: 0; }
+  .scan { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 8px 12px; font-size: .9rem; }
+  .scan[disabled] { opacity: .6; cursor: progress; }
+  .status { font-size: .85rem; color: var(--muted); min-height: 1.2em; margin: -4px 0 0; }
+  .actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .actions.editing { grid-template-columns: 1fr auto; }
+  #cancelEdit { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+  .ac-wrap { position: relative; }
+  .ac {
+    position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; display: none;
+  }
+  .ac.open { display: block; }
+  .ac-sec { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 12px 4px; }
+  .ac-opt { padding: 10px 12px; cursor: pointer; color: var(--text); }
+  .ac-opt small { display: block; color: var(--muted); font-size: .8rem; }
+  .ac-opt.active, .ac-opt:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .ac-note { padding: 10px 12px; color: var(--muted); font-size: .85rem; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .9rem; display: none; gap: 12px; align-items: center; }
   .toast button { background: transparent; color: var(--bg); padding: 0; text-decoration: underline; font-weight: 600; }
 </style>
@@ -83,9 +106,18 @@
 
   <section class="card">
     <form id="form" autocomplete="off">
+      <div class="form-head">
+        <h2 id="formTitle">Add expense</h2>
+        <button type="button" class="scan" id="scanBtn">📷 Scan receipt</button>
+        <input type="file" id="scanFile" accept="image/*" hidden>
+      </div>
+      <p class="status" id="scanStatus"></p>
       <label>What was it for?
-        <input id="what" required placeholder="e.g. Groceries" list="suggestions" enterkeyhint="next">
-        <datalist id="suggestions"></datalist>
+        <div class="ac-wrap">
+          <input id="what" required placeholder="Type a store or item, e.g. DMart" enterkeyhint="next"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ac">
+          <div class="ac" id="ac" role="listbox"></div>
+        </div>
       </label>
       <div class="row">
         <label>Amount (₹)
@@ -95,7 +127,10 @@
           <input id="date" type="date" required>
         </label>
       </div>
-      <button type="submit">Add expense</button>
+      <div class="actions" id="actions">
+        <button type="submit" id="submitBtn">Add expense</button>
+        <button type="button" id="cancelEdit" hidden>Cancel</button>
+      </div>
     </form>
   </section>
 
@@ -107,6 +142,7 @@
 
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
 
+<script src="receipt.js"></script>
 <script>
 (() => {
   const KEY = "expenses.v1";
@@ -116,7 +152,7 @@
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {} };
   let items = load();
-  let lastDeleted = null, toastTimer = null;
+  let lastDeleted = null, toastTimer = null, editingId = null;
 
   const today = () => {
     const d = new Date();
@@ -130,9 +166,6 @@
     $("monthTotal").textContent = fmt.format(items.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
     $("todayTotal").textContent = fmt.format(items.filter(e => e.date === t).reduce((s, e) => s + e.amount, 0));
     $("monthLabel").textContent = new Date(t + "T00:00").toLocaleDateString(undefined, { month: "long" });
-
-    const names = [...new Set(items.map(e => e.what))].slice(0, 50);
-    $("suggestions").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
 
     const shown = items
       .filter(e => !q || e.what.toLowerCase().includes(q))
@@ -151,7 +184,7 @@
         <div class="month-head"><span>${label}</span><span>${fmt.format(total)}</span></div>
         <ul>${list.map(e => {
           const d = new Date(e.date + "T00:00");
-          return `<li>
+          return `<li class="item${e.id === editingId ? " editing" : ""}" data-id="${e.id}" title="Tap to edit">
             <div class="date"><b>${d.getDate()}</b>${d.toLocaleDateString(undefined, { weekday: "short" })}</div>
             <div class="what">${esc(e.what)}</div>
             <div class="amt">${fmt.format(e.amount)}</div>
@@ -176,16 +209,45 @@
     const amount = parseFloat($("amount").value);
     const what = $("what").value.trim();
     if (!what || !(amount > 0)) return;
-    items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), date: $("date").value || today(), what, amount: Math.round(amount * 100) / 100, created: Date.now() });
-    save(); render();
-    $("what").value = ""; $("amount").value = ""; resetDate();
+    const fields = { date: $("date").value || today(), what, amount: Math.round(amount * 100) / 100 };
+    if (editingId) {
+      const e = items.find(x => x.id === editingId);
+      if (e) Object.assign(e, fields);
+      toast("Saved");
+    } else {
+      items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), ...fields, created: Date.now() });
+      toast("Added");
+    }
+    save(); stopEdit(); render();
     $("what").focus();
-    toast("Added");
   });
+
+  function startEdit(id) {
+    const e = items.find(x => x.id === id); if (!e) return;
+    editingId = id;
+    $("what").value = e.what; $("amount").value = e.amount; $("date").value = e.date;
+    $("formTitle").textContent = "Edit expense";
+    $("submitBtn").textContent = "Save changes";
+    $("cancelEdit").hidden = false; $("actions").classList.add("editing");
+    $("scanStatus").textContent = "";
+    render();
+    $("form").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("amount").focus({ preventScroll: true }); $("amount").select();
+  }
+  function stopEdit() {
+    editingId = null;
+    $("what").value = ""; $("amount").value = ""; resetDate();
+    $("formTitle").textContent = "Add expense";
+    $("submitBtn").textContent = "Add expense";
+    $("cancelEdit").hidden = true; $("actions").classList.remove("editing");
+    closeAc();
+  }
+  $("cancelEdit").addEventListener("click", () => { stopEdit(); render(); });
 
   $("list").addEventListener("click", (ev) => {
     const id = ev.target.closest("[data-del]")?.dataset.del;
-    if (!id) return;
+    if (!id) { const row = ev.target.closest("[data-id]"); if (row) startEdit(row.dataset.id); return; }
+    if (id === editingId) stopEdit();
     const i = items.findIndex(e => e.id === id);
     if (i < 0) return;
     lastDeleted = items.splice(i, 1)[0];
@@ -242,6 +304,155 @@
 
   // Keep the date on "today" if the app is left open past midnight
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("amount").value && !$("what").value) { resetDate(); render(); } });
+
+  // ---------- Store search (your past entries + OpenStreetMap via Photon) ----------
+  const ac = $("ac"), whatEl = $("what");
+  let acOpts = [], acIdx = -1, acTimer = null, acCtrl = null, coords = null, askedLoc = false;
+  try { coords = JSON.parse(localStorage.getItem("expenses.loc")); } catch {}
+
+  function askLocation() {
+    if (askedLoc || !navigator.geolocation) return; askedLoc = true;
+    navigator.geolocation.getCurrentPosition(p => {
+      coords = { lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) };
+      try { localStorage.setItem("expenses.loc", JSON.stringify(coords)); } catch {}
+      if (whatEl.value.trim().length >= 2) searchStores(whatEl.value.trim());
+    }, () => {}, { maximumAge: 6e5, timeout: 1e4 });
+  }
+
+  function recentMatches(q) {
+    const ql = q.toLowerCase(), seen = new Set(), out = [];
+    [...items].sort((a, b) => b.created - a.created).forEach(e => {
+      const k = e.what.toLowerCase();
+      if (!seen.has(k) && k.includes(ql) && k !== ql) { seen.add(k); out.push({ name: e.what, sub: "" }); }
+    });
+    return out.slice(0, 4);
+  }
+
+  function drawAc(recent, stores, note) {
+    acOpts = [...recent, ...stores]; acIdx = -1;
+    let html = "", i = 0;
+    if (recent.length) html += `<div class="ac-sec">Your recent</div>` + recent.map(o => `<div class="ac-opt" role="option" data-i="${i++}">${esc(o.name)}</div>`).join("");
+    if (stores.length) html += `<div class="ac-sec">Stores${coords ? " near you" : ""}</div>` + stores.map(o => `<div class="ac-opt" role="option" data-i="${i++}">${esc(o.name)}${o.sub ? `<small>${esc(o.sub)}</small>` : ""}</div>`).join("");
+    if (note) html += `<div class="ac-note">${esc(note)}</div>`;
+    ac.innerHTML = html;
+    const open = !!html && document.activeElement === whatEl;
+    ac.classList.toggle("open", open); whatEl.setAttribute("aria-expanded", open);
+  }
+  function closeAc() { clearTimeout(acTimer); acCtrl?.abort(); ac.classList.remove("open"); whatEl.setAttribute("aria-expanded", "false"); acIdx = -1; }
+
+  async function searchStores(q) {
+    const recent = recentMatches(q);
+    if (q.length < 3) { drawAc(recent, []); return; }
+    drawAc(recent, [], "Searching stores…");
+    acCtrl?.abort(); acCtrl = new AbortController();
+    const url = new URL("https://photon.komoot.io/api/");
+    url.searchParams.set("q", q); url.searchParams.set("limit", "20"); url.searchParams.set("lang", "en");
+    if (coords) { url.searchParams.set("lat", coords.lat); url.searchParams.set("lon", coords.lon); url.searchParams.set("location_bias_scale", "0.5"); }
+    try {
+      const res = await fetch(url, { signal: acCtrl.signal });
+      const data = await res.json();
+      if (whatEl.value.trim() !== q) return;
+      const keep = new Set(["shop", "amenity", "tourism", "leisure", "craft", "office", "healthcare"]);
+      const seen = new Set(recent.map(r => r.name.toLowerCase()));
+      const stores = [];
+      for (const f of data.features || []) {
+        const p = f.properties || {};
+        if (!p.name || !keep.has(p.osm_key)) continue;
+        const sub = [p.street || p.locality || p.district, p.city || p.county].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", ");
+        const key = (p.name + "|" + sub).toLowerCase();
+        if (seen.has(key)) continue; seen.add(key);
+        stores.push({ name: p.name, sub });
+        if (stores.length >= 6) break;
+      }
+      drawAc(recent, stores, stores.length || recent.length ? "" : "No stores found. Just keep typing to use your own text.");
+    } catch (err) {
+      if (err.name !== "AbortError") drawAc(recent, [], recent.length ? "" : "Store search is unavailable right now.");
+    }
+  }
+
+  function pickAc(i) {
+    const o = acOpts[i]; if (!o) return;
+    whatEl.value = o.name; closeAc();
+    if (!$("amount").value) $("amount").focus();
+  }
+
+  whatEl.addEventListener("input", () => {
+    askLocation();
+    const q = whatEl.value.trim();
+    clearTimeout(acTimer);
+    if (!q) { acCtrl?.abort(); closeAc(); return; }
+    acTimer = setTimeout(() => searchStores(q), 300);
+  });
+  whatEl.addEventListener("keydown", (ev) => {
+    if (!ac.classList.contains("open") || !acOpts.length) return;
+    const els = ac.querySelectorAll(".ac-opt");
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      acIdx = (acIdx + (ev.key === "ArrowDown" ? 1 : -1) + els.length) % els.length;
+      els.forEach((el, i) => el.classList.toggle("active", i === acIdx));
+      els[acIdx].scrollIntoView({ block: "nearest" });
+    } else if (ev.key === "Enter" && acIdx >= 0) { ev.preventDefault(); pickAc(acIdx); }
+    else if (ev.key === "Escape") closeAc();
+  });
+  ac.addEventListener("pointerdown", (ev) => {
+    const el = ev.target.closest(".ac-opt"); if (!el) return;
+    ev.preventDefault(); pickAc(+el.dataset.i);
+  });
+  whatEl.addEventListener("blur", () => setTimeout(closeAc, 150));
+
+  // ---------- Receipt scanning (on-device OCR with Tesseract.js) ----------
+  let tesseractLoading = null;
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve();
+    return tesseractLoading ||= new Promise((ok, fail) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      sc.onload = ok; sc.onerror = () => { tesseractLoading = null; fail(new Error("Couldn't load the receipt reader. Check your connection.")); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function prepImage(file) {
+    const bmp = await createImageBitmap(file).catch(async () => {
+      const img = new Image(); img.src = URL.createObjectURL(file); await img.decode(); return img;
+    });
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    const g = c.getContext("2d"); g.drawImage(bmp, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height), d = px.data;
+    for (let i = 0; i < d.length; i += 4) {           // grayscale + contrast boost
+      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    g.putImageData(px, 0, 0);
+    return c;
+  }
+
+  $("scanBtn").addEventListener("click", () => $("scanFile").click());
+  $("scanFile").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0]; ev.target.value = ""; if (!file) return;
+    const btn = $("scanBtn"), st = $("scanStatus");
+    btn.disabled = true; st.textContent = "Loading receipt reader…";
+    try {
+      const [, img] = await Promise.all([loadTesseract(), prepImage(file)]);
+      const { data } = await Tesseract.recognize(img, "eng", {
+        logger: m => { if (m.status === "recognizing text") st.textContent = `Reading receipt… ${Math.round(m.progress * 100)}%`; },
+      });
+      const r = parseReceipt(data.text || "");
+      const found = [];
+      if (r.store) { whatEl.value = r.store; found.push("store"); }
+      if (r.amount) { $("amount").value = r.amount; found.push("amount"); }
+      if (r.date) { $("date").value = r.date; found.push("date"); }
+      st.textContent = found.length
+        ? `Filled in ${found.join(", ")}. Check them, then tap ${editingId ? "Save" : "Add"}.`
+        : "Couldn't read this receipt. Try a flatter, well-lit photo, or type it in.";
+      (r.amount ? $("submitBtn") : r.store ? $("amount") : whatEl).focus();
+    } catch (err) {
+      st.textContent = err.message || "Something went wrong reading the receipt.";
+    } finally { btn.disabled = false; }
+  });
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
