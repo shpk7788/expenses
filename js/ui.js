@@ -172,7 +172,7 @@ export function rowHtml(e, { dupes, selected, showDate = false, full = false } =
   if (dupes?.has(e.id)) flags.push(`<span class="pill warn">${I.copy}Duplicate?</span>`);
   const end = scanning ? `<span class="amt scanning-txt">…</span>` : `<span class="amt${isOffice(e) && !full ? " office" : ""}">${money(spendOf(e))}</span>`;
   const sub2 = e.orig ? `<small>${esc(e.orig.cur)} ${+e.orig.amt}</small>` : e.split ? (full ? `<small>your share ${money(spendOf(e))}</small>` : `<small>of ${money(e.split.total)}</small>`) : "";
-  const icons = [e.img && I.image, (e.receipt?.items?.length) && I.receipt, e.reportId && I.folder].filter(Boolean).slice(0, 2).join("");
+  const icons = [(e.repeat || e.recOf) && I.repeat, e.img && I.image, (e.receipt?.items?.length) && I.receipt, e.reportId && I.folder].filter(Boolean).slice(0, 2).join("");
   return `<li class="erow${scanning ? " scanning" : ""}${selected?.has(e.id) ? " sel" : ""}" data-id="${e.id}">
     <span class="ck">${I.check}</span>
     <div class="cat-ico" style="background:${c.color}22" title="${esc(c.name)}">${c.emoji}${e.img ? `<img data-thumb="${e.id}" alt="" hidden>` : ""}</div>

@@ -164,7 +164,7 @@ export function account() {
       ${u ? row("alerts", I.bell, "Automatic bank alerts", "", "Forward payment SMS to Palli") : ""}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Palli · v8.0</p>`;
+    <p class="ver">Palli · v9.0</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
@@ -267,7 +267,7 @@ export function authScreen() {
   const el = $("auth");
   const signup = authMode === "signup";
   el.innerHTML = `<div class="auth-card">
-    <div class="brand"><span class="logo">${LOGO}</span><div><h1>Palli</h1><p>Your money, beautifully organised.</p></div></div>
+    <div class="brand"><span class="logo">${LOGO}</span><div><h1>Palli</h1><p>Every rupee, quietly kept track of.</p></div></div>
     <div class="card" style="margin:0;padding:20px">
       <h2 style="font-size:1.2rem;margin-bottom:14px">${signup ? "Create your account" : "Sign in"}</h2>
       <form id="authForm" novalidate>

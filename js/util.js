@@ -66,7 +66,7 @@ export const LS = {
 
 // ---- icons (stroke, 24px grid) ----
 const sv = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
-export const LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 20V5h5a4.75 4.75 0 0 1 0 9.5h-5"/></svg>';
+export const LOGO = '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"><path d="M27.4 20.5 20.4 19 17 12.8M36.6 20.5 43.6 19 47 12.8M27.8 32 20.6 35 17.8 41.4M36.2 32 43.4 35 46.2 41.4"/><path d="M32 37.5C31.6 44.5 31.2 50.5 34.2 55C37.2 59.4 43.6 59.6 46 55.6C48.2 51.8 45.6 47.4 41.6 47.6" stroke-width="3.8"/></g><g fill="currentColor"><path d="M32 2.5C38.4 2.5 41.6 5.9 41.6 9.7C41.6 12.9 39.4 15 36.8 16C38.6 18.4 39.2 21.8 39 26.4C38.8 32.4 36 38.6 32 39.6C28 38.6 25.2 32.4 25 26.4C24.8 21.8 25.4 18.4 27.2 16C24.6 15 22.4 12.9 22.4 9.7C22.4 5.9 25.6 2.5 32 2.5Z"/><circle cx="16.4" cy="11.6" r="2.9"/><circle cx="47.6" cy="11.6" r="2.9"/><circle cx="17.2" cy="43" r="2.9"/><circle cx="46.8" cy="43" r="2.9"/></g><circle cx="40.2" cy="53.4" r="2.9" fill="#E9B23A"/><circle cx="27.8" cy="8.6" r="1.8" fill="#E9B23A"/><circle cx="36.2" cy="8.6" r="1.8" fill="#E9B23A"/></svg>';
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 /** Animate a number up to its value (premium feel on totals) */
 export function countUp(el, to, fmt, from = 0) {
@@ -117,6 +117,7 @@ export const I = {
   note: sv('<path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6M9 17h3"/>'),
   star: sv('<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z"/>'),
   image: sv('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>'),
+  repeat: sv('<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>'),
   bell: sv('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'),
   msg: sv('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>'),
   bank: sv('<path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20.5h18"/>'),

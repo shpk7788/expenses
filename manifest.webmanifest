@@ -1,16 +1,28 @@
 {
   "name": "Palli",
   "short_name": "Palli",
-  "description": "Scan receipts, import bank statements and SMS, track spending, split bills.",
+  "description": "Track spending, import bank statements and SMS, scan receipts, split bills.",
   "start_url": "./#/home",
   "display": "standalone",
-  "background_color": "#f4f5f8",
-  "theme_color": "#0f766e",
+  "background_color": "#F2F5F1",
+  "theme_color": "#0F7A57",
   "icons": [
     {
       "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],

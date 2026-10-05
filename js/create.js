@@ -107,6 +107,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
     <button type="button" class="more-toggle" id="fMore" aria-expanded="false"><span>More details</span><small id="fMoreSum"></small>${I.down}</button>
     <div id="fMoreBox" class="more-box" hidden>
     <div class="field"><span>Paid with</span><div class="chips wrap" id="fPay">${PAYS.map(p => `<button type="button" class="chip" data-pay="${esc(p)}" aria-pressed="${e.pay === p}">${esc(p)}</button>`).join("")}</div></div>
+    ${e.split ? "" : `<div class="field"><span>Repeats</span><div class="chips wrap" id="fRepeat">${[["", "Never"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]].map(([v, l]) => `<button type="button" class="chip" data-rep="${v}" aria-pressed="${(e.repeat?.every || "") === v}">${l}</button>`).join("")}</div></div>`}
     <label class="field"><span>Description <span class="muted">(optional)</span></span><input id="fNote" value="${esc(e.note || "")}" placeholder="e.g. dinner with Arjun" autocapitalize="sentences"></label>
     <label class="field"><span>Tags <span class="muted">(optional, comma separated)</span></span><input id="fTags" value="${esc((e.tags || []).join(", "))}" placeholder="e.g. work, goa-trip" autocapitalize="none"></label>
     <label class="field"><span>Report</span><select id="fRep"><option value="">None</option>${reportsOpen.map(r => `<option value="${r.id}" ${r.id === e.reportId ? "selected" : ""}>${esc(r.name)}</option>`).join("")}<option value="__new">+ New report…</option></select></label>
@@ -141,7 +142,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   $$("#fDates").addEventListener("click", (ev) => { const b = ev.target.closest("[data-day]"); if (!b) return; $$("#fDate").value = addDays(today(), +b.dataset.day); $$("#fDate").dispatchEvent(new Event("change")); });
   $$("#fDate").addEventListener("change", drawDates); drawDates();
   // more details
-  const moreSum = () => { const bits = [s.el.querySelector('[data-pay][aria-pressed="true"]')?.dataset.pay, $$("#fNote").value && "note", $$("#fTags").value && "tags", $$("#fRep").value && $$("#fRep").value !== "__new" && $$("#fRep").selectedOptions[0]?.text, $$("#fReimb").checked && "reimbursable"].filter(Boolean); $$("#fMoreSum").textContent = bits.join(" · "); };
+  const moreSum = () => { const bits = [s.el.querySelector('[data-pay][aria-pressed="true"]')?.dataset.pay, { week: "weekly", month: "monthly", year: "yearly" }[s.el.querySelector('[data-rep][aria-pressed="true"]')?.dataset.rep], $$("#fNote").value && "note", $$("#fTags").value && "tags", $$("#fRep").value && $$("#fRep").value !== "__new" && $$("#fRep").selectedOptions[0]?.text, $$("#fReimb").checked && "reimbursable"].filter(Boolean); $$("#fMoreSum").textContent = bits.join(" · "); };
   const setMore = (open) => { $$("#fMoreBox").hidden = !open; $$("#fMore").setAttribute("aria-expanded", open); };
   $$("#fMore").onclick = () => setMore($$("#fMoreBox").hidden);
   s.body.addEventListener("change", moreSum); s.body.addEventListener("click", (ev) => { if (ev.target.closest("[data-pay]")) setTimeout(moreSum); });
@@ -155,6 +156,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
     if (v) { catId = v; catTouched = true; drawCat(); }
   };
   $$("#fPay").onclick = (ev) => { const b = ev.target.closest("[data-pay]"); if (!b) return; const on = b.getAttribute("aria-pressed") !== "true"; s.el.querySelectorAll("[data-pay]").forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", on); };
+  const rp = $$("#fRepeat"); if (rp) rp.onclick = (ev) => { const b = ev.target.closest("[data-rep]"); if (!b) return; rp.querySelectorAll("[data-rep]").forEach(x => x.setAttribute("aria-pressed", x === b)); moreSum(); };
   $$("#fRep").onchange = async (ev) => {
     if (ev.target.value !== "__new") return;
     const r = await newReport();
@@ -216,12 +218,15 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
       reportId: $$("#fRep").value && $$("#fRep").value !== "__new" ? $$("#fRep").value : undefined,
       reimb: $$("#fReimb").checked || undefined,
     };
+    const rep = s.el.querySelector('[data-rep][aria-pressed="true"]')?.dataset.rep;
+    if (!e.split && !e.recOf) patch.repeat = rep ? { ...(e.repeat || {}), every: rep } : undefined;
     if (isDist) patch.distance = { from: $$("#dFrom").value.trim(), to: $$("#dTo").value.trim(), km: parseFloat($$("#dKm").value) || 0, vehicle: $$("#dVeh").value, rate: parseFloat($$("#dRate").value) || 0, round: $$("#dRound").checked || undefined };
     if (ex && ex.status && patch.amount) patch.status = undefined; // reviewed
     if (catTouched) St.learn(patch.what, catId);
     if (payBtn) localStorage.setItem("exp:lastPay", payBtn.dataset.pay);
     if (ex) { St.update(ex.id, patch); toast("Saved"); }
-    else { const n = { ...e, ...patch }; Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); toast("Expense added"); }
+    else { const n = { ...e, ...patch }; Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); toast(n.repeat ? `Added · repeats ${St.REPEATS[n.repeat.every].toLowerCase()}` : "Expense added"); }
+    if (patch.repeat) St.runRecurring();
     s.close();
   };
   $$("#fDel")?.addEventListener("click", async () => {

@@ -1,6 +1,6 @@
 // Home, Spend (list / calendar / insights), Expense detail.
 import { $, esc, norm, r2, money, moneyBig, moneyHero, moneyIn, compact, today, addDays, addMonths, diffDays, parse, ymd, daysIn, weekStart, fyStart, monthStart, monthEnd,
-  MONTHS, dLong, dMed, dShort, dayLabel, timeAgo, plural, I, pad } from "./util.js";
+  MONTHS, dLong, dMed, dShort, dayLabel, timeAgo, plural, I, pad, LOGO } from "./util.js";
 import { CATS, cat, PAYS } from "./cats.js";
 import * as St from "./store.js";
 import { Api } from "./api.js";
@@ -50,14 +50,17 @@ export function home() {
     if (b.pct > 100) todo.push({ ic: I.alert, cls: "bad", t: `${cat(b.id).name} is ${money(b.spent - b.lim)} over budget`, s: `${money(b.spent)} of ${money(b.lim)} this month`, go: "#/spend?v=insights" });
     else if (b.pct >= 85) todo.push({ ic: I.alert, t: `${cat(b.id).name}: ${Math.round(b.pct)}% of budget used`, s: `${money(b.lim - b.spent)} left for ${plural(daysLeft, "day")}`, go: "#/spend?v=insights" });
   }
+  const asks = all.filter(e => e.ask).length;
+  if (asks) todo.unshift({ ic: I.split, cls: "acc", t: `${plural(asks, "payment")} to people`, s: "What were they for? Sort them in a few taps", go: "#/people" });
   if (St.S.inbox.length) todo.unshift({ ic: I.bell, cls: "acc", t: `${plural(St.S.inbox.length, "new bank alert")}`, s: "Tap to review and add them", go: "#/import?inbox=1" });
+  for (const r of all.filter(e => e.repeat)) { const d = St.nextDue(r), n = d && diffDays(t, d); if (n != null && n <= 3) todo.push({ ic: I.repeat, t: `${r.what} · ${money(r.amount)} ${n === 1 ? "tomorrow" : n === 0 ? "today" : `in ${n} days`}`, s: `Repeats ${St.REPEATS[r.repeat.every].toLowerCase()} — added automatically on ${dShort(d)}`, go: `#/expense/${r.id}` }); }
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
-  const recent = [...all].sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 5);
+  const recent = [...all].sort((a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0)).slice(0, 5);
   const topCats = Object.entries(catSpent).filter(([id, v]) => v > 0 && !(P.catBudgets || {})[id]).sort((a, b) => b[1] - a[1]).slice(0, budgetRows.length ? 3 : 4);
   const hi = Api.user ? `Hi, ${esc(Api.user.username)}` : "Home";
 
   $("view").innerHTML = top(hi, { right: syncPill() }) + `
-    <section class="hero-card" aria-label="This month">
+    <section class="hero-card" aria-label="This month"><span class="hero-gecko" aria-hidden="true">${LOGO}</span>
       <div class="hero-top"><span>Spent in ${MONTHS[new Date().getMonth()]}</span><span class="hero-pill">Today <b>${moneyBig(todayTot)}</b></span></div>
       <div class="hero-big num" data-count="${month}">${moneyHero(month)}</div>
       ${budget}
@@ -523,6 +526,8 @@ export async function detail(id) {
   if (e.status === "scanning") flags.push(`<span class="pill">Scanning…</span>`);
   if (St.isOffice(e)) flags.push(`<span class="pill open">${e.reimb ? "Reimbursable" : "Office"} · not in your spending</span>`);
   if (rep) flags.push(`<span class="pill">${I.folder}${esc(rep.name)}</span>`);
+  const tpl = e.recOf && St.get(e.recOf);
+  if (tpl && !tpl.deleted && tpl.repeat) flags.push(`<button type="button" class="pill open" data-go="#/expense/${tpl.id}">${I.repeat}Repeats ${St.REPEATS[tpl.repeat.every].toLowerCase()}</button>`);
   (e.tags || []).forEach(t => flags.push(`<button type="button" class="pill" data-go="#/spend?tag=${encodeURIComponent(t)}">#${esc(t)}</button>`));
   const fr = (key, ic, label, val, ph) => `<button type="button" class="frow" data-edit="${key}">${ic}<span><small>${label}</small><b class="${val ? "" : "ph"}">${val || ph}</b></span><span class="chev">${I.right}</span></button>`;
   const items = e.receipt?.items || [], extras = e.receipt?.extras || [], base = e.split ? e.split.total : e.amount;
@@ -555,6 +560,7 @@ export async function detail(id) {
       ${fr("note", I.note, "Description", esc(e.note || ""), "Add a description")}
       ${fr("tags", I.tag, "Tags", (e.tags || []).map(t => "#" + esc(t)).join(" "), "Add tags")}
       ${fr("report", I.folder, "Report", esc(rep?.name || ""), "Not on a report")}
+      ${e.split || e.recOf ? "" : fr("repeat", I.repeat, "Repeats", e.repeat ? `${St.REPEATS[e.repeat.every]}${St.nextDue(e) ? ` · next ${dShort(St.nextDue(e))}` : ""}` : "", "Never")}
       ${e.type === "distance" && e.distance ? fr("amount", I.car, "Trip", `${esc(e.distance.from || "?")} → ${esc(e.distance.to || "?")} · ${+e.distance.km}${e.distance.round ? " × 2" : ""} km × ₹${+e.distance.rate}`, "") : ""}
       <label class="frow" style="cursor:pointer">${I.check}<span><small>Reimbursable</small><b>${e.reimb ? "Yes — not counted in your spending" : "No"}</b></span><span class="switch"><input type="checkbox" data-d="reimb" ${e.reimb ? "checked" : ""} aria-label="Reimbursable"><i></i></span></label>
     </div></div>
@@ -591,6 +597,14 @@ async function editField(id, ed) {
     if (e.split && ["amount", "what", "date"].includes(ed)) { openSplit({ id }); return true; }
     if (ed === "cat") { const v = await pickCategory({ value: e.cat }); if (v && v !== e.cat) { St.update(id, { cat: v }); St.learn(e.what, v); } return true; }
     if (ed === "pay") { const v = await pickList({ title: "Paid with", value: e.pay || "", options: [{ value: "", label: "Not set" }, ...PAYS.map(p => ({ value: p, label: p }))] }); if (v !== null) St.update(id, { pay: v || undefined }); return true; }
+    if (ed === "repeat") {
+      const v = await pickList({ title: "Repeats", value: e.repeat?.every || "", options: [{ value: "", label: "Never" }, { value: "week", label: "Every week" }, { value: "month", label: "Every month", sub: "Rent, subscriptions, fees" }, { value: "year", label: "Every year", sub: "Insurance, memberships" }] });
+      if (v === null) return true;
+      St.update(id, { repeat: v ? { ...(e.repeat || {}), every: v } : undefined }, { log: false });
+      if (v) { const n = St.runRecurring(); toast(n ? `Repeats ${St.REPEATS[v].toLowerCase()} · added ${plural(n, "past entry", "past entries")}` : `Repeats ${St.REPEATS[v].toLowerCase()} — next on ${dShort(St.nextDue(St.get(id)))}`); }
+      else toast("Stopped repeating — past entries are kept");
+      return true;
+    }
     if (ed === "report") {
       const rs = St.reports().filter(r => r.status !== "reimbursed" || r.id === e.reportId);
       const v = await pickList({ title: "Report", value: e.reportId || "", options: [{ value: "", label: "Not on a report" }, ...rs.map(r => ({ value: r.id, label: r.name })), { value: "__new", label: "+ New report" }] });

@@ -1,5 +1,5 @@
 // App state: records (expenses, reports, settlements), prefs, sync engine.
-import { LS, norm, r2, uuid, today, money, addDays, diffDays } from "./util.js";
+import { LS, norm, r2, uuid, today, money, addDays, addMonths, diffDays } from "./util.js";
 import { Api } from "./api.js";
 import { catFor, cat } from "./cats.js";
 import { Img, forgetUrl } from "./media.js";
@@ -34,6 +34,7 @@ export function load() {
   S.cursor = LS.get(K("cursor"), null);
   S.lastSynced = LS.get(K("synced"), 0);
   S.noBucket = false;
+  runRecurring();
 }
 export function persist() {
   const ok = LS.set(K("items"), S.items);
@@ -93,6 +94,7 @@ const TRACK = { amount: "amount", what: "merchant", date: "date", cat: "category
 export function update(id, patch, { log = true } = {}) {
   const e = get(id); if (!e) return null;
   const n = { ...e, ...patch };
+  if ("cat" in patch) delete n.ask;   // a category was chosen → no longer "what was this for?"
   for (const k of Object.keys(patch)) if (patch[k] === undefined || patch[k] === "" || patch[k] === null) delete n[k];
   if (log && e.kind === "expense") {
     const notes = [];
@@ -112,12 +114,51 @@ export function remove(id) {
     const kids = inReport(id);
     copy._children = kids.map(x => x.id);
     saveMany([...kids.map(x => { const n = { ...x }; delete n.reportId; return n; }), { ...e, deleted: true }]);
+  } else if (e.recOf && get(e.recOf)?.repeat) { // deleting one month of a repeat: don't bring it back
+    const t = get(e.recOf);
+    saveMany([{ ...e, deleted: true }, { ...t, repeat: { ...t.repeat, skip: [...new Set([...(t.repeat.skip || []), e.date])] } }]);
   } else save({ ...e, deleted: true });
   if (e.img) setTimeout(() => { // free the photo once the undo window has passed
     const x = get(id);
     if (!x || x.deleted) { Img.del(id); forgetUrl(id); if (Api.user) { S.imgUp.delete(id); S.imgDel.add(id); persist(); scheduleSync(); } }
   }, 15000);
   return copy;
+}
+// ---------- repeating expenses (rent, subscriptions, a trainer's monthly fee) ----------
+export const REPEATS = { week: "Weekly", month: "Monthly", year: "Yearly" };
+const stepDate = (d0, every, k) => every === "week" ? addDays(d0, 7 * k) : every === "year" ? addMonths(d0, 12 * k) : addMonths(d0, k);
+/** Same id on every device for "this repeat on this date", so two phones never double-add */
+function seededId(str) {
+  const h = []; for (let seed = 0; seed < 4; seed++) { let x = 0x811c9dc5 ^ (seed * 0x9e3779b9); for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; } h.push(x.toString(16).padStart(8, "0")); }
+  const hex = h.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+/** Next date a repeat is due (after today), or null */
+export function nextDue(e) {
+  if (!e?.repeat) return null;
+  const t = today();
+  for (let k = 1; k < 2000; k++) { const d = stepDate(e.date, e.repeat.every, k); if (e.repeat.until && d > e.repeat.until) return null; if (d > t) return d; }
+  return null;
+}
+/** Add any repeat occurrences that have come due (up to today) */
+export function runRecurring() {
+  const t = today(), add = [];
+  for (const e of S.items) {
+    if (e.kind !== "expense" || e.deleted || !e.repeat || e.split) continue;
+    const skip = new Set(e.repeat.skip || []);
+    for (let k = 1; k <= 400; k++) {
+      const d = stepDate(e.date, e.repeat.every, k);
+      if (d > t || (e.repeat.until && d > e.repeat.until)) break;
+      if (skip.has(d)) continue;
+      const id = seededId(`${e.id}|${d}`);
+      if (get(id)) continue;
+      const n = { id, kind: "expense", type: "manual", date: d, what: e.what, amount: e.amount, cat: e.cat, created: Date.now(), comments: [], recOf: e.id };
+      for (const f of ["pay", "note", "tags", "place", "reimb", "orig"]) if (e[f] !== undefined) n[f] = JSON.parse(JSON.stringify(e[f]));
+      add.push(n);
+    }
+  }
+  if (add.length) saveMany(add);
+  return add.length;
 }
 export function restore(copy) {
   const { _children, ...rec } = copy;
@@ -150,10 +191,10 @@ export async function getImage(id) {
 }
 
 // ---------- prefs (synced via account metadata for signed-in users) ----------
-const PREF_DEFAULTS = { budget: 0, catBudgets: {}, currency: "INR", upi: "", name: "", rates: { car: 10, bike: 4 }, rules: {}, theme: "system", saved: [] };
+const PREF_DEFAULTS = { budget: 0, catBudgets: {}, currency: "INR", upi: "", name: "", rates: { car: 10, bike: 4 }, rules: {}, people: {}, theme: "system", saved: [] };
 export function prefs() {
   const raw = Api.user ? (Api.user.meta || {}) : LS.get(K("settings", "guest"), {});
-  return { ...PREF_DEFAULTS, ...raw, rates: { ...PREF_DEFAULTS.rates, ...(raw.rates || {}) }, rules: raw.rules || {}, catBudgets: raw.catBudgets || {} };
+  return { ...PREF_DEFAULTS, ...raw, rates: { ...PREF_DEFAULTS.rates, ...(raw.rates || {}) }, rules: raw.rules || {}, people: raw.people || {}, catBudgets: raw.catBudgets || {} };
 }
 let metaT = null;
 export const metaDirty = () => !!LS.get(K("metaDirty"), false);
@@ -167,7 +208,7 @@ export async function loadPrefs() {
   if (!Api.user) return;
   const server = await Api.fetchMeta();
   if (!server) return;
-  Api.setMetaLocal(metaDirty() ? { ...server, ...Api.user.meta, rules: { ...(server.rules || {}), ...(Api.user.meta.rules || {}) } } : server);
+  Api.setMetaLocal(metaDirty() ? { ...server, ...Api.user.meta, rules: { ...(server.rules || {}), ...(Api.user.meta.rules || {}) }, people: { ...(server.people || {}), ...(Api.user.meta.people || {}) } } : server);
   if (metaDirty()) flushMeta();
   applyTheme(); emit();
 }
@@ -275,7 +316,7 @@ export async function syncNow() {
     if (metaDirty()) await flushMeta();
     checkInbox();
     S.lastSynced = Date.now(); persist();
-    if (changed) emit();
+    if (changed) { runRecurring(); emit(); }
     setState("ok");
   } catch (err) {
     setState(Api.user ? "err" : "off", err.message || "Sync failed");
@@ -285,17 +326,36 @@ export async function syncNow() {
   }
 }
 window.addEventListener("online", () => scheduleSync(200));
-document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSync(200); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { runRecurring(); scheduleSync(200); } });
 setInterval(() => { if (!document.hidden) syncNow(); }, 60000);
 
 /** Bank alerts waiting to be reviewed (sent automatically from the phone) */
+const clearing = new Set();
+const leftover = () => LS.get(K("inboxDel"), []);
+const setLeftover = (ids) => ids.length ? LS.set(K("inboxDel"), ids) : LS.del(K("inboxDel"));
 export async function checkInbox() {
   if (!Api.user) { S.inbox = []; return; }
-  try { const rows = await Api.inbox(); const n = (rows || []).length; if (n !== S.inbox.length || (n && rows[n - 1].id !== S.inbox[n - 1].id)) { S.inbox = rows || []; emit(); } } catch {}
+  const old = leftover().filter(i => !clearing.has(i));   // deletes interrupted by closing the app
+  if (old.length) { try { await Api.clearInbox(old); setLeftover(leftover().filter(i => !old.includes(i))); } catch {} }
+  const lo = new Set(leftover());
+  try { const rows = (await Api.inbox() || []).filter(r => !clearing.has(r.id) && !lo.has(r.id)); const n = (rows || []).length; if (n !== S.inbox.length || (n && rows[n - 1].id !== S.inbox[n - 1].id)) { S.inbox = rows || []; emit(); } } catch {}
 }
-export async function clearInbox(ids) {
-  const set = new Set(ids); S.inbox = S.inbox.filter(r => !set.has(r.id)); emit();
-  try { await Api.clearInbox(ids); } catch {}
+/** Hide alerts now; delete them on the server after `delay` ms unless the returned undo() is called */
+export function clearInbox(ids, delay = 0) {
+  if (!ids.length) return () => {};
+  const set = new Set(ids), gone = S.inbox.filter(r => set.has(r.id));
+  S.inbox = S.inbox.filter(r => !set.has(r.id)); emit();
+  ids.forEach(i => clearing.add(i)); setLeftover([...new Set([...leftover(), ...ids])]);
+  let done = false;
+  const t = setTimeout(async () => { done = true; try { await Api.clearInbox(ids); setLeftover(leftover().filter(i => !set.has(i))); } catch {} ids.forEach(i => clearing.delete(i)); }, delay);
+  return () => { if (done) return; clearTimeout(t); ids.forEach(i => clearing.delete(i)); setLeftover(leftover().filter(i => !set.has(i))); S.inbox = [...S.inbox, ...gone].sort((a, b) => a.id - b.id); emit(); };
+}
+/** Remember who a UPI name is: { name, cat } — "Subash" → "Subash (gym trainer)", Health */
+export function rememberPerson(raw, patch) {
+  const k = norm(raw); if (!k) return;
+  const p = prefs().people, cur = p[k] || {};
+  const next = { ...cur, ...patch };
+  if (JSON.stringify(next) !== JSON.stringify(cur)) setPrefs({ people: { ...p, [k]: next } });
 }
 export function switchSpace() { S.inbox = []; load(); setState(Api.user ? "idle" : "off"); applyTheme(); emit(); }
 /** Move guest (device-only) records into the signed-in account */
