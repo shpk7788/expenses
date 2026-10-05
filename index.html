@@ -4,88 +4,167 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Expenses</title>
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root {
+    color-scheme: light dark;
     --bg: #f6f7f9; --card: #ffffff; --text: #111827; --muted: #6b7280;
-    --line: #e5e7eb; --accent: #0f766e; --accent-ink: #ffffff; --danger: #b91c1c;
-    --radius: 14px;
+    --line: #e5e7eb; --field: #f3f4f6; --accent: #0f766e; --accent-ink: #ffffff;
+    --accent-soft: rgba(15, 118, 110, .10); --danger: #b91c1c;
+    --shadow: 0 10px 30px rgba(17, 24, 39, .14);
+    --radius: 14px; --field-h: 48px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0b0f14; --card: #151b23; --text: #e5e7eb; --muted: #9ca3af;
-      --line: #263040; --accent: #14b8a6; --accent-ink: #04201d; --danger: #f87171;
+      --line: #263040; --field: #0f141b; --accent: #2dd4bf; --accent-ink: #042f2b;
+      --accent-soft: rgba(45, 212, 191, .12); --danger: #f87171;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .5);
     }
   }
-  * { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    -webkit-tap-highlight-color: transparent;
   }
-  main { max-width: 640px; margin: 0 auto; padding: 16px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; margin: 8px 0 16px; }
+  main {
+    max-width: 640px; margin: 0 auto;
+    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 16px; }
   h1 { font-size: 1.4rem; margin: 0; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .summary div span { display: block; color: var(--muted); font-size: .8rem; }
-  .summary div strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+  .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .summary span { display: block; color: var(--muted); font-size: .8rem; }
+  .summary strong { display: block; font-size: clamp(1.05rem, 5.2vw, 1.35rem); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
   form { display: grid; gap: 12px; }
-  label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
-  input {
-    font: inherit; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 10px; padding: 12px; width: 100%;
-  }
-  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  button {
-    font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer;
-    background: var(--accent); color: var(--accent-ink); font-weight: 600;
-  }
-  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; padding: 8px 12px; font-size: .85rem; }
-  .month { margin-top: 8px; }
-  .month-head { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; padding: 4px 4px 8px; }
-  ul { list-style: none; margin: 0; padding: 0; }
-  li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); }
-  li:first-child { border-top: 0; }
-  .date { color: var(--muted); font-size: .8rem; width: 3.2em; text-align: center; line-height: 1.1; }
-  .date b { display: block; font-size: 1.1rem; color: var(--text); }
-  .what { overflow-wrap: anywhere; }
-  .amt { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .icon-btn { background: transparent; color: var(--muted); padding: 6px 8px; font-weight: 400; }
-  .icon-btn:hover { color: var(--danger); }
-  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
-  .tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .search { margin-bottom: 8px; }
-  li.item { cursor: pointer; }
-  li.item:hover .what { text-decoration: underline; text-decoration-color: var(--line); }
-  li.editing { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px; }
-  .form-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .form-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 40px; }
   .form-head h2 { font-size: 1rem; margin: 0; }
-  .scan { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 8px 12px; font-size: .9rem; }
+  label, .lbl { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); min-width: 0; }
+  .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  input {
+    font: inherit; font-size: 16px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
+    width: 100%; min-width: 0; max-width: 100%; height: var(--field-h); margin: 0; display: block;
+    -webkit-appearance: none; appearance: none;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  input[type="date"] { line-height: var(--field-h); }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; min-height: 1.45em; }
+  input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; margin: 0; cursor: pointer; }
+  input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+  .money { position: relative; }
+  .money::before { content: "₹"; position: absolute; left: 12px; top: 0; bottom: 0; display: flex; align-items: center; line-height: 1; color: var(--muted); pointer-events: none; }
+  .money input { padding-left: 28px; }
+
+  button { font: inherit; border: 0; border-radius: 10px; cursor: pointer; color: inherit; background: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; height: var(--field-h); padding: 0 16px; }
+  .secondary { border: 1px solid var(--line); color: var(--muted); height: var(--field-h); padding: 0 16px; }
+  .ghost { border: 1px solid var(--line); color: var(--muted); padding: 8px 12px; font-size: .85rem; white-space: nowrap; }
+  .scan { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent); padding: 8px 12px; font-size: .9rem; font-weight: 500; white-space: nowrap; }
+  .scan svg { width: 18px; height: 18px; }
   .scan[disabled] { opacity: .6; cursor: progress; }
-  .status { font-size: .85rem; color: var(--muted); min-height: 1.2em; margin: -4px 0 0; }
+  .status { font-size: .85rem; color: var(--muted); margin: -4px 0 0; }
+  .status:empty { display: none; }
+  .status.ok { color: var(--accent); }
   .actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .actions.editing { grid-template-columns: 1fr auto; }
-  #cancelEdit { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+  .tools { display: flex; gap: 8px; }
+
+  /* store autocomplete */
   .ac-wrap { position: relative; }
   .ac {
-    position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px);
-    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; display: none;
+    position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 6px);
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); max-height: min(340px, 50vh); overflow-y: auto; overscroll-behavior: contain;
+    display: none; padding: 4px 0;
   }
   .ac.open { display: block; }
-  .ac-sec { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 12px 4px; }
-  .ac-opt { padding: 10px 12px; cursor: pointer; color: var(--text); }
-  .ac-opt small { display: block; color: var(--muted); font-size: .8rem; }
-  .ac-opt.active, .ac-opt:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .ac-note { padding: 10px 12px; color: var(--muted); font-size: .85rem; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .9rem; display: none; gap: 12px; align-items: center; }
-  .toast button { background: transparent; color: var(--bg); padding: 0; text-decoration: underline; font-weight: 600; }
+  .ac-sec { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 14px 4px; }
+  .ac-opt { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; cursor: pointer; color: var(--text); }
+  .ac-opt b { font-weight: 700; }
+  .ac-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ac-opt small { flex: none; color: var(--muted); font-size: .78rem; }
+  .ac-opt.active, .ac-opt:hover { background: var(--accent-soft); }
+
+  /* list */
+  .search { margin-bottom: 8px; }
+  .month + .month { margin-top: 12px; }
+  .month-head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .85rem; padding: 4px 4px 6px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li.item {
+    display: grid; grid-template-columns: 2.6em minmax(0, 1fr) auto 36px; gap: 10px; align-items: center;
+    padding: 10px 4px; cursor: pointer; border-radius: 8px; position: relative;
+  }
+  li.item + li.item::before { content: ""; position: absolute; left: 4px; right: 4px; top: 0; border-top: 1px solid var(--line); }
+  li.item:hover::before, li.item:hover + li.item::before, li.item.editing::before, li.item.editing + li.item::before { border-color: transparent; }
+  li.item:hover { background: var(--accent-soft); }
+  li.item.editing { background: var(--accent-soft); outline: 1px solid var(--accent); }
+  .date { color: var(--muted); font-size: .75rem; text-align: center; line-height: 1.15; }
+  .date b { display: block; font-size: 1.1rem; color: var(--text); }
+  .what { min-width: 0; display: flex; align-items: center; gap: 6px; }
+  .what span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; word-break: break-word; }
+  .rcpt { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--accent); }
+  .rcpt:hover { background: var(--accent-soft); }
+  .rcpt svg { width: 18px; height: 18px; }
+  .amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .del { width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); }
+  .del:hover { color: var(--danger); background: rgba(185, 28, 28, .08); }
+  .del svg { width: 16px; height: 16px; }
+  .empty { color: var(--muted); text-align: center; padding: 20px 0 8px; margin: 0; }
+
+  /* receipt dialog */
+  dialog {
+    border: 0; padding: 0; background: transparent; color: var(--text);
+    width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 48px);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  .paper {
+    background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; max-height: calc(100dvh - 48px); overflow: hidden;
+  }
+  .paper-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 18px 12px; border-bottom: 1px dashed var(--line); }
+  .paper-head h3 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+  .paper-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+  .paper-body { overflow-y: auto; padding: 8px 18px 18px; }
+  .ri { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .ri:last-child { border-bottom: 0; }
+  .ri .n { min-width: 0; overflow-wrap: anywhere; }
+  .ri .n small { color: var(--muted); margin-left: 4px; }
+  .ri .p { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ri.sub { color: var(--muted); font-size: .9rem; padding: 4px 0; border: 0; }
+  .ri.total { font-weight: 700; border-top: 1px dashed var(--line); border-bottom: 0; margin-top: 6px; padding-top: 12px; }
+  .note { color: var(--muted); font-size: .8rem; margin: 8px 0 0; }
+  .x { width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); flex: none; margin: -6px -8px 0 0; }
+  .x svg { width: 18px; height: 18px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    max-width: calc(100vw - 32px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+    font-size: .9rem; display: none; gap: 14px; align-items: center; box-shadow: var(--shadow); z-index: 50;
+  }
+  .toast.show { display: flex; }
+  .toast button { color: var(--bg); text-decoration: underline; font-weight: 600; padding: 0; }
+  [hidden] { display: none !important; }
+  @media (max-width: 360px) {
+    .ghost { padding: 6px 8px; font-size: .8rem; }
+    .summary strong { font-size: 1.15rem; }
+    li.item { gap: 8px; grid-template-columns: 2.2em minmax(0, 1fr) auto 32px; }
+    .amt { font-size: .92rem; }
+    .del { width: 32px; }
+  }
 </style>
 </head>
 <body>
@@ -99,73 +178,102 @@
     </div>
   </header>
 
-  <section class="card summary">
+  <section class="card summary" aria-live="polite">
     <div><span id="monthLabel">This month</span><strong id="monthTotal">₹0</strong></div>
     <div><span>Today</span><strong id="todayTotal">₹0</strong></div>
   </section>
 
   <section class="card">
-    <form id="form" autocomplete="off">
+    <form id="form" autocomplete="off" novalidate>
       <div class="form-head">
         <h2 id="formTitle">Add expense</h2>
-        <button type="button" class="scan" id="scanBtn">📷 Scan receipt</button>
+        <button type="button" class="scan" id="scanBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Scan receipt</span>
+        </button>
         <input type="file" id="scanFile" accept="image/*" hidden>
       </div>
-      <p class="status" id="scanStatus"></p>
-      <label>What was it for?
+      <p class="status" id="scanStatus" aria-live="polite"></p>
+      <div class="lbl">
+        <label for="what" style="display:block">What was it for?</label>
         <div class="ac-wrap">
-          <input id="what" required placeholder="Type a store or item, e.g. DMart" enterkeyhint="next"
+          <input id="what" placeholder="Store or item, e.g. DMart" enterkeyhint="next" autocapitalize="words"
                  role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ac">
           <div class="ac" id="ac" role="listbox"></div>
         </div>
-      </label>
+      </div>
       <div class="row">
-        <label>Amount (₹)
-          <input id="amount" type="number" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
+        <label>Amount
+          <div class="money"><input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
         </label>
         <label>Date
-          <input id="date" type="date" required>
+          <input id="date" type="date">
         </label>
       </div>
       <div class="actions" id="actions">
-        <button type="submit" id="submitBtn">Add expense</button>
-        <button type="button" id="cancelEdit" hidden>Cancel</button>
+        <button type="submit" class="primary" id="submitBtn">Add expense</button>
+        <button type="button" class="secondary" id="cancelEdit" hidden>Cancel</button>
       </div>
     </form>
   </section>
 
   <section class="card">
-    <input class="search" id="search" type="search" placeholder="Search expenses">
+    <input class="search" id="search" type="search" placeholder="Search expenses" hidden>
     <div id="list"></div>
   </section>
 </main>
 
-<div class="toast" id="toast"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
+<dialog id="receiptDlg" aria-labelledby="rTitle">
+  <div class="paper">
+    <div class="paper-head">
+      <div><h3 id="rTitle"></h3><p id="rDate"></p></div>
+      <button class="x" type="button" id="rClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="paper-body" id="rBody"></div>
+  </div>
+</dialog>
 
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
+
+<script src="stores.js"></script>
 <script src="receipt.js"></script>
 <script>
 (() => {
   const KEY = "expenses.v1";
   const $ = (id) => document.getElementById(id);
   const fmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
+  const fmt0 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+  const fmtSum = (v) => (v >= 1e5 ? fmt0 : fmt).format(v);
+  const ICON_RECEIPT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>';
+  const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {} };
+  const save = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(items)); }
+    catch { toast("Couldn't save — your browser storage is full. Export a backup."); }
+  };
   let items = load();
-  let lastDeleted = null, toastTimer = null, editingId = null;
+  let lastDeleted = null, toastTimer = null, editingId = null, pendingReceipt = null;
 
   const today = () => {
     const d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   };
   const resetDate = () => { $("date").value = today(); };
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
+  // ---------- list ----------
   function render() {
     const q = $("search").value.trim().toLowerCase();
     const t = today(), m = t.slice(0, 7);
-    $("monthTotal").textContent = fmt.format(items.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
-    $("todayTotal").textContent = fmt.format(items.filter(e => e.date === t).reduce((s, e) => s + e.amount, 0));
-    $("monthLabel").textContent = new Date(t + "T00:00").toLocaleDateString(undefined, { month: "long" });
+    $("monthTotal").textContent = fmtSum(items.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
+    $("todayTotal").textContent = fmtSum(items.filter(e => e.date === t).reduce((s, e) => s + e.amount, 0));
+    $("monthLabel").textContent = new Date(t + "T00:00").toLocaleDateString("en-IN", { month: "long" });
+    $("search").hidden = items.length < 2;
 
     const shown = items
       .filter(e => !q || e.what.toLowerCase().includes(q))
@@ -179,115 +287,263 @@
     shown.forEach(e => (groups[e.date.slice(0, 7)] ||= []).push(e));
     $("list").innerHTML = Object.entries(groups).map(([month, list]) => {
       const total = list.reduce((s, e) => s + e.amount, 0);
-      const label = new Date(month + "-01T00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      const label = new Date(month + "-01T00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
       return `<div class="month">
         <div class="month-head"><span>${label}</span><span>${fmt.format(total)}</span></div>
         <ul>${list.map(e => {
           const d = new Date(e.date + "T00:00");
+          const hasR = e.receipt && (e.receipt.items?.length || e.receipt.extras?.length);
           return `<li class="item${e.id === editingId ? " editing" : ""}" data-id="${e.id}" title="Tap to edit">
-            <div class="date"><b>${d.getDate()}</b>${d.toLocaleDateString(undefined, { weekday: "short" })}</div>
-            <div class="what">${esc(e.what)}</div>
+            <div class="date"><b>${d.getDate()}</b>${d.toLocaleDateString("en-IN", { weekday: "short" })}</div>
+            <div class="what"><span>${esc(e.what)}</span>${hasR ? `<button class="rcpt" type="button" data-receipt="${e.id}" aria-label="View receipt items" title="View receipt">${ICON_RECEIPT}</button>` : ""}</div>
             <div class="amt">${fmt.format(e.amount)}</div>
-            <button class="icon-btn" data-del="${e.id}" aria-label="Delete">✕</button>
+            <button class="del" type="button" data-del="${e.id}" aria-label="Delete">${ICON_X}</button>
           </li>`;
         }).join("")}</ul></div>`;
     }).join("");
   }
 
-  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-
   function toast(msg, undo) {
     $("toastMsg").textContent = msg;
-    $("undoBtn").style.display = undo ? "" : "none";
-    $("toast").style.display = "flex";
+    $("undoBtn").hidden = !undo;
+    $("toast").classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { $("toast").style.display = "none"; lastDeleted = null; }, 4000);
+    toastTimer = setTimeout(() => { $("toast").classList.remove("show"); lastDeleted = null; }, undo ? 5000 : 2500);
   }
 
+  // ---------- add / edit ----------
   $("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    const amount = parseFloat($("amount").value);
     const what = $("what").value.trim();
-    if (!what || !(amount > 0)) return;
+    const amount = parseFloat($("amount").value);
+    if (!what) { $("what").focus(); return toast("Add what it was for"); }
+    if (!(amount > 0)) { $("amount").focus(); return toast("Enter an amount"); }
     const fields = { date: $("date").value || today(), what, amount: Math.round(amount * 100) / 100 };
+    if (pendingReceipt) fields.receipt = pendingReceipt;
     if (editingId) {
       const e = items.find(x => x.id === editingId);
       if (e) Object.assign(e, fields);
       toast("Saved");
     } else {
-      items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), ...fields, created: Date.now() });
+      items.push({ id: newId(), ...fields, created: Date.now() });
       toast("Added");
     }
     save(); stopEdit(); render();
-    $("what").focus();
   });
 
   function startEdit(id) {
     const e = items.find(x => x.id === id); if (!e) return;
-    editingId = id;
+    editingId = id; pendingReceipt = null;
     $("what").value = e.what; $("amount").value = e.amount; $("date").value = e.date;
     $("formTitle").textContent = "Edit expense";
     $("submitBtn").textContent = "Save changes";
     $("cancelEdit").hidden = false; $("actions").classList.add("editing");
-    $("scanStatus").textContent = "";
-    render();
+    setStatus("");
+    closeAc(); render();
     $("form").scrollIntoView({ behavior: "smooth", block: "center" });
-    $("amount").focus({ preventScroll: true }); $("amount").select();
+    $("amount").focus({ preventScroll: true });
   }
   function stopEdit() {
-    editingId = null;
+    editingId = null; pendingReceipt = null;
     $("what").value = ""; $("amount").value = ""; resetDate();
     $("formTitle").textContent = "Add expense";
     $("submitBtn").textContent = "Add expense";
     $("cancelEdit").hidden = true; $("actions").classList.remove("editing");
+    setStatus("");
     closeAc();
   }
   $("cancelEdit").addEventListener("click", () => { stopEdit(); render(); });
 
   $("list").addEventListener("click", (ev) => {
-    const id = ev.target.closest("[data-del]")?.dataset.del;
-    if (!id) { const row = ev.target.closest("[data-id]"); if (row) startEdit(row.dataset.id); return; }
-    if (id === editingId) stopEdit();
-    const i = items.findIndex(e => e.id === id);
-    if (i < 0) return;
-    lastDeleted = items.splice(i, 1)[0];
-    save(); render();
-    toast("Deleted", true);
+    const r = ev.target.closest("[data-receipt]");
+    if (r) return showReceipt(r.dataset.receipt);
+    const del = ev.target.closest("[data-del]");
+    if (del) {
+      const i = items.findIndex(e => e.id === del.dataset.del); if (i < 0) return;
+      if (items[i].id === editingId) stopEdit();
+      lastDeleted = items.splice(i, 1)[0];
+      save(); render(); toast("Deleted", true);
+      return;
+    }
+    const row = ev.target.closest("[data-id]");
+    if (row) startEdit(row.dataset.id);
   });
-
   $("undoBtn").addEventListener("click", () => {
     if (lastDeleted) { items.push(lastDeleted); lastDeleted = null; save(); render(); }
-    $("toast").style.display = "none";
+    $("toast").classList.remove("show");
   });
-
   $("search").addEventListener("input", render);
 
+  // ---------- receipt viewer ----------
+  function showReceipt(id) {
+    const e = items.find(x => x.id === id); if (!e?.receipt) return;
+    const { items: list = [], extras = [] } = e.receipt;
+    const d = new Date(e.date + "T00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    $("rTitle").textContent = e.what;
+    $("rDate").textContent = `${d} · ${list.length} item${list.length === 1 ? "" : "s"}`;
+    const sum = list.reduce((s, i) => s + i.p, 0) + extras.reduce((s, i) => s + i.p, 0);
+    let html = list.map(i => `<div class="ri"><span class="n">${esc(i.n)}${i.q ? `<small>× ${i.q}</small>` : ""}</span><span class="p">${fmt.format(i.p)}</span></div>`).join("");
+    if (extras.length) html += `<div style="height:6px"></div>` + extras.map(i => `<div class="ri sub"><span class="n">${esc(i.n)}</span><span class="p">${fmt.format(i.p)}</span></div>`).join("");
+    html += `<div class="ri total"><span>Total</span><span class="p">${fmt.format(e.amount)}</span></div>`;
+    if (Math.abs(sum - e.amount) > 1) html += `<p class="note">Items add up to ${fmt.format(sum)}. Some lines may not have been read from the photo.</p>`;
+    $("rBody").innerHTML = html;
+    $("receiptDlg").showModal();
+    $("rBody").scrollTop = 0;
+  }
+  $("rClose").addEventListener("click", () => $("receiptDlg").close());
+  $("receiptDlg").addEventListener("click", (ev) => { if (ev.target === ev.currentTarget) ev.currentTarget.close(); });
+
+  // ---------- store search: your history + built-in brand list (instant, offline) ----------
+  const ac = $("ac"), whatEl = $("what");
+  const STORE_IDX = (window.STORES || []).map(([name, cat, india]) => ({
+    name, cat, india, n: norm(name), words: name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+  }));
+  let acOpts = [], acIdx = -1;
+
+  function highlight(name, q) {
+    const i = name.toLowerCase().indexOf(q.toLowerCase());
+    return i < 0 ? esc(name) : esc(name.slice(0, i)) + "<b>" + esc(name.slice(i, i + q.length)) + "</b>" + esc(name.slice(i + q.length));
+  }
+
+  function suggest(q) {
+    const nq = norm(q); if (!nq) return closeAc();
+    // your own past entries, most used first
+    const counts = new Map();
+    items.forEach(e => { const k = norm(e.what); const c = counts.get(k); counts.set(k, { name: c?.name || e.what, n: (c?.n || 0) + 1 }); });
+    const recent = [...counts.entries()]
+      .filter(([k]) => k.includes(nq))
+      .sort((a, b) => (b[0].startsWith(nq) - a[0].startsWith(nq)) || b[1].n - a[1].n)
+      .slice(0, 4).map(([k, v]) => ({ name: v.name, sub: v.n > 1 ? `${v.n}×` : "" }));
+    const taken = new Set(counts.keys());
+    // brands: prefix > word-prefix > contains; India first within each
+    const ql = q.toLowerCase().trim();
+    const scored = [];
+    for (const s of STORE_IDX) {
+      if (taken.has(s.n)) continue;
+      const score = s.n === nq ? -1 : s.n.startsWith(nq) ? 0 : s.words.some(w => w.startsWith(ql) || w.startsWith(nq)) ? 1
+        : nq.length >= 3 && s.words.some(w => w.includes(nq)) ? 2 : null;
+      if (score === null) continue;
+      scored.push([score * 2 + (s.india ? 0 : 1), s]);
+    }
+    scored.sort((a, b) => a[0] - b[0] || a[1].name.length - b[1].name.length);
+    const stores = scored.slice(0, 7).map(([, s]) => ({ name: s.name, sub: s.cat }));
+
+    acOpts = [...recent, ...stores]; acIdx = -1;
+    if (!acOpts.length) return closeAc();
+    let i = 0, html = "";
+    if (recent.length) html += `<div class="ac-sec">Your history</div>` + recent.map(o => `<div class="ac-opt" role="option" data-i="${i++}"><span>${highlight(o.name, q)}</span><small>${esc(o.sub)}</small></div>`).join("");
+    if (stores.length) html += `<div class="ac-sec">Stores</div>` + stores.map(o => `<div class="ac-opt" role="option" data-i="${i++}"><span>${highlight(o.name, q)}</span><small>${esc(o.sub)}</small></div>`).join("");
+    ac.innerHTML = html; ac.scrollTop = 0;
+    ac.classList.add("open"); whatEl.setAttribute("aria-expanded", "true");
+  }
+  function closeAc() { ac.classList.remove("open"); whatEl.setAttribute("aria-expanded", "false"); acIdx = -1; }
+  function pickAc(i) {
+    const o = acOpts[i]; if (!o) return;
+    whatEl.value = o.name; closeAc();
+    $("amount").focus();
+  }
+  whatEl.addEventListener("input", () => suggest(whatEl.value.trim()));
+  whatEl.addEventListener("focus", () => { if (whatEl.value.trim()) suggest(whatEl.value.trim()); });
+  whatEl.addEventListener("keydown", (ev) => {
+    if (!ac.classList.contains("open")) return;
+    const els = ac.querySelectorAll(".ac-opt");
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      acIdx = (acIdx + (ev.key === "ArrowDown" ? 1 : -1) + els.length) % els.length;
+      els.forEach((el, i) => el.classList.toggle("active", i === acIdx));
+      els[acIdx].scrollIntoView({ block: "nearest" });
+    } else if (ev.key === "Enter") {
+      ev.preventDefault();
+      if (acIdx >= 0) pickAc(acIdx); else { closeAc(); $("amount").focus(); }
+    } else if (ev.key === "Escape" || ev.key === "Tab") closeAc();
+  });
+  // pointerdown + preventDefault keeps focus in the input so the list doesn't vanish before the tap lands
+  ac.addEventListener("pointerdown", (ev) => { if (ev.target.closest(".ac-opt")) ev.preventDefault(); });
+  ac.addEventListener("click", (ev) => { const el = ev.target.closest(".ac-opt"); if (el) pickAc(+el.dataset.i); });
+  whatEl.addEventListener("blur", () => setTimeout(closeAc, 150));
+  document.addEventListener("pointerdown", (ev) => { if (!ev.target.closest(".ac-wrap")) closeAc(); });
+
+  // ---------- receipt scanning (on-device OCR) ----------
+  function setStatus(msg, ok) { const st = $("scanStatus"); st.textContent = msg; st.classList.toggle("ok", !!ok); }
+  let tesseractLoading = null;
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve();
+    return tesseractLoading ||= new Promise((ok, fail) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      sc.onload = ok; sc.onerror = () => { tesseractLoading = null; sc.remove(); fail(new Error("Couldn't load the receipt reader. Check your internet connection and try again.")); };
+      document.head.appendChild(sc);
+    });
+  }
+  async function prepImage(file) {
+    let src;
+    try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+    catch { src = new Image(); src.src = URL.createObjectURL(file); await src.decode(); }
+    const w = src.width, h = src.height, scale = Math.min(1, 2000 / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(src, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height), d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    g.putImageData(px, 0, 0);
+    return c;
+  }
+  $("scanBtn").addEventListener("click", () => $("scanFile").click());
+  $("scanFile").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0]; ev.target.value = ""; if (!file) return;
+    const btn = $("scanBtn");
+    btn.disabled = true; setStatus("Loading receipt reader…");
+    try {
+      const [, img] = await Promise.all([loadTesseract(), prepImage(file)]);
+      const { data } = await Tesseract.recognize(img, "eng", {
+        logger: m => { if (m.status === "recognizing text") setStatus(`Reading receipt… ${Math.round(m.progress * 100)}%`); },
+      });
+      const r = parseReceipt(data.text || "");
+      const found = [];
+      if (r.store) { whatEl.value = r.store; found.push("store"); }
+      if (r.amount) { $("amount").value = r.amount; found.push("amount"); }
+      if (r.date) { $("date").value = r.date; found.push("date"); }
+      pendingReceipt = (r.items.length || r.extras.length) ? { items: r.items, extras: r.extras } : null;
+      if (pendingReceipt) found.push(`${r.items.length} item${r.items.length === 1 ? "" : "s"}`);
+      if (found.length) {
+        setStatus(`Found ${found.join(", ")}. Check, then tap ${editingId ? "Save changes" : "Add expense"}.`, true);
+        (r.amount ? $("submitBtn") : $("amount")).focus();
+      } else setStatus("Couldn't read this receipt. Try a flat, well-lit photo, or type it in.");
+    } catch (err) {
+      setStatus(err.message || "Something went wrong reading the receipt.");
+    } finally { btn.disabled = false; }
+  });
+
+  // ---------- CSV ----------
   $("exportBtn").addEventListener("click", () => {
-    const rows = [["date", "what", "amount"], ...[...items].sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, e.what, e.amount])];
+    if (!items.length) return toast("Nothing to export yet");
+    const rows = [["date", "what", "amount", "receipt_items"], ...[...items].sort((a, b) => a.date.localeCompare(b.date))
+      .map(e => [e.date, e.what, e.amount, (e.receipt?.items || []).map(i => `${i.n}${i.q ? " x" + i.q : ""}: ${i.p}`).join("; ")])];
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = `expenses-${today()}.csv`;
-    a.click();
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
-
   $("importBtn").addEventListener("click", () => $("importFile").click());
   $("importFile").addEventListener("change", async (ev) => {
     const file = ev.target.files[0]; if (!file) return;
-    const lines = parseCSV(await file.text());
-    let added = 0;
+    const rows = parseCSV(await file.text()); let added = 0;
     const seen = new Set(items.map(e => `${e.date}|${e.what}|${e.amount}`));
-    lines.slice(1).forEach(([date, what, amount]) => {
+    rows.slice(1).forEach(([date, what, amount]) => {
       const amt = parseFloat(amount);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !what || !(amt > 0)) return;
       const k = `${date}|${what}|${amt}`; if (seen.has(k)) return; seen.add(k);
-      items.push({ id: String(Date.now() + Math.random()), date, what, amount: amt, created: Date.now() });
-      added++;
+      items.push({ id: newId(), date, what, amount: amt, created: Date.now() }); added++;
     });
     save(); render(); ev.target.value = "";
     toast(`Imported ${added} expense${added === 1 ? "" : "s"}`);
   });
-
   function parseCSV(text) {
     const rows = []; let row = [], cur = "", q = false;
     for (let i = 0; i < text.length; i++) {
@@ -302,160 +558,11 @@
     return rows;
   }
 
-  // Keep the date on "today" if the app is left open past midnight
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("amount").value && !$("what").value) { resetDate(); render(); } });
-
-  // ---------- Store search (your past entries + OpenStreetMap via Photon) ----------
-  const ac = $("ac"), whatEl = $("what");
-  let acOpts = [], acIdx = -1, acTimer = null, acCtrl = null, coords = null, askedLoc = false;
-  try { coords = JSON.parse(localStorage.getItem("expenses.loc")); } catch {}
-
-  function askLocation() {
-    if (askedLoc || !navigator.geolocation) return; askedLoc = true;
-    navigator.geolocation.getCurrentPosition(p => {
-      coords = { lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) };
-      try { localStorage.setItem("expenses.loc", JSON.stringify(coords)); } catch {}
-      if (whatEl.value.trim().length >= 2) searchStores(whatEl.value.trim());
-    }, () => {}, { maximumAge: 6e5, timeout: 1e4 });
-  }
-
-  function recentMatches(q) {
-    const ql = q.toLowerCase(), seen = new Set(), out = [];
-    [...items].sort((a, b) => b.created - a.created).forEach(e => {
-      const k = e.what.toLowerCase();
-      if (!seen.has(k) && k.includes(ql) && k !== ql) { seen.add(k); out.push({ name: e.what, sub: "" }); }
-    });
-    return out.slice(0, 4);
-  }
-
-  function drawAc(recent, stores, note) {
-    acOpts = [...recent, ...stores]; acIdx = -1;
-    let html = "", i = 0;
-    if (recent.length) html += `<div class="ac-sec">Your recent</div>` + recent.map(o => `<div class="ac-opt" role="option" data-i="${i++}">${esc(o.name)}</div>`).join("");
-    if (stores.length) html += `<div class="ac-sec">Stores${coords ? " near you" : ""}</div>` + stores.map(o => `<div class="ac-opt" role="option" data-i="${i++}">${esc(o.name)}${o.sub ? `<small>${esc(o.sub)}</small>` : ""}</div>`).join("");
-    if (note) html += `<div class="ac-note">${esc(note)}</div>`;
-    ac.innerHTML = html;
-    const open = !!html && document.activeElement === whatEl;
-    ac.classList.toggle("open", open); whatEl.setAttribute("aria-expanded", open);
-  }
-  function closeAc() { clearTimeout(acTimer); acCtrl?.abort(); ac.classList.remove("open"); whatEl.setAttribute("aria-expanded", "false"); acIdx = -1; }
-
-  async function searchStores(q) {
-    const recent = recentMatches(q);
-    if (q.length < 3) { drawAc(recent, []); return; }
-    drawAc(recent, [], "Searching stores…");
-    acCtrl?.abort(); acCtrl = new AbortController();
-    const url = new URL("https://photon.komoot.io/api/");
-    url.searchParams.set("q", q); url.searchParams.set("limit", "20"); url.searchParams.set("lang", "en");
-    if (coords) { url.searchParams.set("lat", coords.lat); url.searchParams.set("lon", coords.lon); url.searchParams.set("location_bias_scale", "0.5"); }
-    try {
-      const res = await fetch(url, { signal: acCtrl.signal });
-      const data = await res.json();
-      if (whatEl.value.trim() !== q) return;
-      const keep = new Set(["shop", "amenity", "tourism", "leisure", "craft", "office", "healthcare"]);
-      const seen = new Set(recent.map(r => r.name.toLowerCase()));
-      const stores = [];
-      for (const f of data.features || []) {
-        const p = f.properties || {};
-        if (!p.name || !keep.has(p.osm_key)) continue;
-        const sub = [p.street || p.locality || p.district, p.city || p.county].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", ");
-        const key = (p.name + "|" + sub).toLowerCase();
-        if (seen.has(key)) continue; seen.add(key);
-        stores.push({ name: p.name, sub });
-        if (stores.length >= 6) break;
-      }
-      drawAc(recent, stores, stores.length || recent.length ? "" : "No stores found. Just keep typing to use your own text.");
-    } catch (err) {
-      if (err.name !== "AbortError") drawAc(recent, [], recent.length ? "" : "Store search is unavailable right now.");
-    }
-  }
-
-  function pickAc(i) {
-    const o = acOpts[i]; if (!o) return;
-    whatEl.value = o.name; closeAc();
-    if (!$("amount").value) $("amount").focus();
-  }
-
-  whatEl.addEventListener("input", () => {
-    askLocation();
-    const q = whatEl.value.trim();
-    clearTimeout(acTimer);
-    if (!q) { acCtrl?.abort(); closeAc(); return; }
-    acTimer = setTimeout(() => searchStores(q), 300);
+  // keep "today" correct if the app stays open past midnight
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !editingId && !$("amount").value && !whatEl.value) { resetDate(); render(); }
   });
-  whatEl.addEventListener("keydown", (ev) => {
-    if (!ac.classList.contains("open") || !acOpts.length) return;
-    const els = ac.querySelectorAll(".ac-opt");
-    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-      ev.preventDefault();
-      acIdx = (acIdx + (ev.key === "ArrowDown" ? 1 : -1) + els.length) % els.length;
-      els.forEach((el, i) => el.classList.toggle("active", i === acIdx));
-      els[acIdx].scrollIntoView({ block: "nearest" });
-    } else if (ev.key === "Enter" && acIdx >= 0) { ev.preventDefault(); pickAc(acIdx); }
-    else if (ev.key === "Escape") closeAc();
-  });
-  ac.addEventListener("pointerdown", (ev) => {
-    const el = ev.target.closest(".ac-opt"); if (!el) return;
-    ev.preventDefault(); pickAc(+el.dataset.i);
-  });
-  whatEl.addEventListener("blur", () => setTimeout(closeAc, 150));
-
-  // ---------- Receipt scanning (on-device OCR with Tesseract.js) ----------
-  let tesseractLoading = null;
-  function loadTesseract() {
-    if (window.Tesseract) return Promise.resolve();
-    return tesseractLoading ||= new Promise((ok, fail) => {
-      const sc = document.createElement("script");
-      sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-      sc.onload = ok; sc.onerror = () => { tesseractLoading = null; fail(new Error("Couldn't load the receipt reader. Check your connection.")); };
-      document.head.appendChild(sc);
-    });
-  }
-
-  async function prepImage(file) {
-    const bmp = await createImageBitmap(file).catch(async () => {
-      const img = new Image(); img.src = URL.createObjectURL(file); await img.decode(); return img;
-    });
-    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-    const g = c.getContext("2d"); g.drawImage(bmp, 0, 0, c.width, c.height);
-    const px = g.getImageData(0, 0, c.width, c.height), d = px.data;
-    for (let i = 0; i < d.length; i += 4) {           // grayscale + contrast boost
-      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    g.putImageData(px, 0, 0);
-    return c;
-  }
-
-  $("scanBtn").addEventListener("click", () => $("scanFile").click());
-  $("scanFile").addEventListener("change", async (ev) => {
-    const file = ev.target.files[0]; ev.target.value = ""; if (!file) return;
-    const btn = $("scanBtn"), st = $("scanStatus");
-    btn.disabled = true; st.textContent = "Loading receipt reader…";
-    try {
-      const [, img] = await Promise.all([loadTesseract(), prepImage(file)]);
-      const { data } = await Tesseract.recognize(img, "eng", {
-        logger: m => { if (m.status === "recognizing text") st.textContent = `Reading receipt… ${Math.round(m.progress * 100)}%`; },
-      });
-      const r = parseReceipt(data.text || "");
-      const found = [];
-      if (r.store) { whatEl.value = r.store; found.push("store"); }
-      if (r.amount) { $("amount").value = r.amount; found.push("amount"); }
-      if (r.date) { $("date").value = r.date; found.push("date"); }
-      st.textContent = found.length
-        ? `Filled in ${found.join(", ")}. Check them, then tap ${editingId ? "Save" : "Add"}.`
-        : "Couldn't read this receipt. Try a flatter, well-lit photo, or type it in.";
-      (r.amount ? $("submitBtn") : r.store ? $("amount") : whatEl).focus();
-    } catch (err) {
-      st.textContent = err.message || "Something went wrong reading the receipt.";
-    } finally { btn.disabled = false; }
-  });
-
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-
   resetDate(); render();
 })();
 </script>

@@ -83,6 +83,28 @@
     return null;
   }
 
+  // Line items: "<name> [qty] [rate] <amount>" above the total line.
+  function findItems(lines) {
+    const stop = /grand\s*total|net\s*(amount|amt|payable|total)|(amount|amt)\s*(payable|due)|bill\s*(amount|total)|^\W*total\b/i;
+    let end = lines.findIndex(l => stop.test(l) && !/sub\s*-?\s*total/i.test(l));
+    if (end < 0) end = lines.length;
+    const skip = /sub\s*-?\s*total|\btotal\b|cash|change|tendered|card\b|upi|paid|balance|saved|savings|round\s*off|^\W*(items?|qty)\b|bill\s*no|invoice|gstin|date|time|table|cashier|token|phone|mob\b/i;
+    const extra = /\b(c|s|i|ut)?gst\b|vat\b|\btax|service\s*charge|packing|delivery|discount|\bcess\b|\btip\b|convenience|platform\s*fee|container/i;
+    const items = [], extras = [];
+    const re = /^(.*?[A-Za-z]{2,}.*?)\s+((?:[\dxX@*.,]+\s+)*?)(-?\d{1,3}(?:,\d{2,3})*\.\d{2}|-?\d+\.\d{2})\s*$/;
+    for (let i = 0; i < end; i++) {
+      const m = re.exec(lines[i]); if (!m) continue;
+      let name = m[1].replace(/^\s*\d{1,6}[\s.)-]+(?=[A-Za-z])/, "").replace(/[\s:.\-–—]+$/, "").trim();
+      const price = toNum(m[3]);
+      if (!name || !(Math.abs(price) > 0) || skip.test(name)) continue;
+      if (extra.test(name)) { extras.push({ n: name, p: /discount/i.test(name) ? -Math.abs(price) : price }); continue; }
+      const mid = (m[2].match(/\d+(?:\.\d+)?/g) || []).map(Number);
+      const q = mid.length && Number.isInteger(mid[0]) && mid[0] > 0 && mid[0] < 1000 ? mid[0] : null;
+      items.push(q && q !== 1 ? { n: name, q, p: price } : { n: name, p: price });
+    }
+    return { items: items.slice(0, 100), extras: extras.slice(0, 20) };
+  }
+
   function parseReceipt(text, now) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const norm = lines.map(normalize);
@@ -91,6 +113,7 @@
       store: findStore(lines),
       amount: total != null ? Math.round(total * 100) / 100 : null,
       date: findDate(text, now),
+      ...findItems(norm),
     };
   }
 
