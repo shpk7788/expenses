@@ -4,749 +4,181 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Expenses</title>
-<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<style>
-  :root {
-    color-scheme: light dark;
-    --bg: #f6f7f9; --card: #ffffff; --text: #111827; --muted: #6b7280;
-    --line: #e5e7eb; --field: #f3f4f6; --accent: #0f766e; --accent-ink: #ffffff;
-    --accent-soft: rgba(15, 118, 110, .10); --danger: #b91c1c; --warn: #b45309;
-    --shadow: 0 10px 30px rgba(17, 24, 39, .14);
-    --radius: 14px; --field-h: 48px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0b0f14; --card: #151b23; --text: #e5e7eb; --muted: #9ca3af;
-      --line: #263040; --field: #0f141b; --accent: #2dd4bf; --accent-ink: #042f2b;
-      --accent-soft: rgba(45, 212, 191, .12); --danger: #f87171; --warn: #fbbf24;
-      --shadow: 0 10px 30px rgba(0, 0, 0, .5);
-    }
-  }
-  *, *::before, *::after { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    -webkit-tap-highlight-color: transparent;
-  }
-  main {
-    max-width: 640px; margin: 0 auto;
-    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 16px; }
-  h1 { font-size: 1.4rem; margin: 0; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-  .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .summary span { display: block; color: var(--muted); font-size: .8rem; }
-  .summary strong { display: block; font-size: clamp(1.05rem, 5.2vw, 1.35rem); font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-  form { display: grid; gap: 12px; }
-  .form-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 40px; }
-  .form-head h2 { font-size: 1rem; margin: 0; }
-  .lbl, label { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); min-width: 0; }
-  .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  input {
-    font: inherit; font-size: 16px; color: var(--text); background: var(--field);
-    border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
-    width: 100%; min-width: 0; max-width: 100%; height: var(--field-h); margin: 0; display: block;
-    -webkit-appearance: none; appearance: none;
-  }
-  input::placeholder { color: var(--muted); opacity: .8; }
-  input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
-  input[type="date"] { line-height: var(--field-h); }
-  input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; min-height: 1.45em; }
-  input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; margin: 0; cursor: pointer; }
-  input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-  input[type="number"] { -moz-appearance: textfield; }
-  input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
-  .money { position: relative; }
-  .money::before { content: "₹"; position: absolute; left: 12px; top: 0; bottom: 0; display: flex; align-items: center; line-height: 1; color: var(--muted); pointer-events: none; }
-  .money input { padding-left: 28px; }
-
-  button { font: inherit; border: 0; border-radius: 10px; cursor: pointer; color: inherit; background: none; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; height: var(--field-h); padding: 0 16px; }
-  .secondary { border: 1px solid var(--line); color: var(--muted); height: var(--field-h); padding: 0 16px; }
-  .danger { border: 1px solid var(--line); color: var(--danger); height: var(--field-h); width: var(--field-h); display: grid; place-items: center; }
-  .danger svg { width: 18px; height: 18px; }
-  .ghost { border: 1px solid var(--line); color: var(--muted); padding: 8px 12px; font-size: .85rem; white-space: nowrap; }
-  .scan { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent); padding: 8px 12px; font-size: .9rem; font-weight: 500; white-space: nowrap; }
-  .scan svg { width: 18px; height: 18px; }
-  .scan[disabled] { opacity: .6; cursor: progress; }
-  .status { font-size: .85rem; color: var(--muted); margin: -4px 0 0; }
-  .status:empty { display: none; }
-  .status.ok { color: var(--accent); }
-  .actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .actions.editing { grid-template-columns: 1fr auto auto; }
-  .tools { display: flex; gap: 8px; }
-
-  /* autocomplete */
-  .ac-wrap { position: relative; }
-  .ac {
-    position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 6px);
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: var(--shadow); max-height: min(340px, 50vh); overflow-y: auto; overscroll-behavior: contain;
-    display: none; padding: 4px 0;
-  }
-  .ac.open { display: block; }
-  .ac-sec { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 14px 4px; }
-  .ac-opt { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; cursor: pointer; color: var(--text); }
-  .ac-opt b { font-weight: 700; }
-  .ac-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ac-opt small { flex: none; color: var(--muted); font-size: .78rem; }
-  .ac-opt.active, .ac-opt:hover { background: var(--accent-soft); }
-
-  /* list */
-  .search { margin-bottom: 8px; }
-  .month + .month { margin-top: 12px; }
-  .month-head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .85rem; padding: 4px 4px 6px; }
-  ul { list-style: none; margin: 0; padding: 0; }
-  li.item {
-    display: grid; grid-template-columns: 2.6em minmax(0, 1fr) auto 40px; gap: 10px; align-items: center;
-    padding: 10px 4px; cursor: pointer; border-radius: 8px; position: relative;
-  }
-  li.item + li.item::before { content: ""; position: absolute; left: 4px; right: 4px; top: 0; border-top: 1px solid var(--line); }
-  li.item:hover::before, li.item:hover + li.item::before, li.item.editing::before, li.item.editing + li.item::before { border-color: transparent; }
-  li.item:hover { background: var(--accent-soft); }
-  li.item.editing { background: var(--accent-soft); outline: 1px solid var(--accent); }
-  .date { color: var(--muted); font-size: .75rem; text-align: center; line-height: 1.15; }
-  .date b { display: block; font-size: 1.1rem; color: var(--text); }
-  .what { min-width: 0; }
-  .what span, .what small { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; word-break: break-word; }
-  .what span { -webkit-line-clamp: 2; line-clamp: 2; }
-  .what small { -webkit-line-clamp: 1; line-clamp: 1; color: var(--muted); font-size: .8rem; }
-  .amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-  .rcpt { width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); border-radius: 10px; position: relative; }
-  .rcpt.has { color: var(--accent); }
-  .rcpt.has::after { content: ""; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); border: 2px solid var(--card); }
-  .rcpt:hover { background: var(--accent-soft); color: var(--accent); }
-  .rcpt svg { width: 20px; height: 20px; }
-  .empty { color: var(--muted); text-align: center; padding: 20px 0 8px; margin: 0; }
-
-  /* receipt dialog */
-  dialog {
-    border: 0; padding: 0; background: transparent; color: var(--text);
-    width: min(460px, calc(100vw - 16px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto;
-  }
-  dialog::backdrop { background: rgba(0, 0, 0, .45); }
-  .paper {
-    background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
-    display: flex; flex-direction: column; max-height: calc(100dvh - 32px); overflow: hidden;
-  }
-  .paper-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 18px 12px; border-bottom: 1px dashed var(--line); }
-  .paper-head h3 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
-  .paper-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
-  .paper-body { overflow-y: auto; padding: 4px 18px 16px; overscroll-behavior: contain; }
-  .paper-foot { display: flex; gap: 8px; padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
-  .paper-foot button { flex: 1; height: 44px; }
-  .sec-title { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 4px; }
-  .ri { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-  .ri:last-child { border-bottom: 0; }
-  .ri .n { min-width: 0; overflow-wrap: anywhere; }
-  .ri .n small { color: var(--muted); margin-left: 4px; white-space: nowrap; }
-  .ri .p { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .none { color: var(--muted); font-size: .9rem; padding: 6px 0; margin: 0; }
-  .totals { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
-  .totals .ri { border: 0; padding: 4px 0; color: var(--muted); }
-  .totals .ri.grand { color: var(--text); font-weight: 700; font-size: 1.05rem; padding-top: 8px; }
-  .totals .ri.gap { color: var(--warn); }
-  .note { color: var(--muted); font-size: .8rem; margin: 6px 0 0; }
-  .fix { margin-top: 8px; width: 100%; height: 40px; border: 1px dashed var(--accent); color: var(--accent); font-size: .9rem; }
-  .x { width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); flex: none; margin: -6px -8px 0 0; }
-  .x svg { width: 18px; height: 18px; }
-  /* editable rows */
-  .er { display: grid; grid-template-columns: minmax(0, 1fr) 3.4em 6.5em 36px; gap: 6px; align-items: center; padding: 4px 0; }
-  .er.tax { grid-template-columns: minmax(0, 1fr) 6.5em 36px; }
-  .er input { height: 40px; padding: 0 10px; border-radius: 8px; }
-  .er .money::before { left: 9px; }
-  .er .money input { padding-left: 22px; }
-  .er .q { text-align: center; padding: 0 4px; }
-  .rm { width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); }
-  .rm:hover { color: var(--danger); }
-  .rm svg { width: 16px; height: 16px; }
-  .add { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: .9rem; font-weight: 500; padding: 8px 2px; }
-  .add svg { width: 16px; height: 16px; }
-  .er-head { display: grid; grid-template-columns: minmax(0, 1fr) 3.4em 6.5em 36px; gap: 6px; font-size: .72rem; color: var(--muted); padding: 0 2px; }
-  @media (max-width: 400px) {
-    .er:not(.tax) { grid-template-columns: 3em minmax(0, 1fr) 36px; grid-template-areas: "n n n" "q p r"; row-gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-    .er:not(.tax) .nm { grid-area: n; } .er:not(.tax) .q { grid-area: q; } .er:not(.tax) .money { grid-area: p; } .er:not(.tax) .rm { grid-area: r; }
-    .er-head { display: none; }
-  }
-
-  .toast {
-    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
-    max-width: calc(100vw - 32px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px;
-    font-size: .9rem; display: none; gap: 14px; align-items: center; box-shadow: var(--shadow); z-index: 50;
-  }
-  .toast.show { display: flex; }
-  .toast button { color: var(--bg); text-decoration: underline; font-weight: 600; padding: 0; }
-  [hidden] { display: none !important; }
-  @media (max-width: 360px) {
-    .ghost { padding: 6px 8px; font-size: .8rem; }
-    li.item { gap: 8px; grid-template-columns: 2.2em minmax(0, 1fr) auto 36px; }
-    .amt { font-size: .92rem; }
-    .rcpt { width: 36px; }
-  }
-</style>
+<link rel="stylesheet" href="app.css?v=5.1">
 </head>
 <body>
-<main>
-  <header>
-    <h1>Expenses</h1>
-    <div class="tools">
-      <button class="ghost" id="exportBtn" type="button">Export CSV</button>
-      <button class="ghost" id="importBtn" type="button">Import</button>
-      <input type="file" id="importFile" accept=".csv,text/csv" hidden>
-    </div>
-  </header>
+<header class="topbar">
+  <div class="topbar-in">
+    <h1 id="pageTitle">Expenses</h1>
+    <button class="acct-btn" id="acctBtn" type="button" aria-label="Account">
+      <span class="nm" id="acctName">Log in</span>
+      <span class="avatar" id="acctAvatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><i class="dot" id="syncDot"></i></span>
+    </button>
+  </div>
+</header>
 
-  <section class="card summary" aria-live="polite">
-    <div><span id="monthLabel">This month</span><strong id="monthTotal">₹0</strong></div>
-    <div><span>Today</span><strong id="todayTotal">₹0</strong></div>
+<main>
+  <!-- ============ EXPENSES ============ -->
+  <section id="tab-list" role="tabpanel">
+    <div class="card hero">
+      <div class="hero-top">
+        <div><div class="label" id="heroLabel">Spent this month</div><div class="big num" id="heroTotal">₹0</div></div>
+        <div class="side"><div class="label">Today</div><b class="num" id="heroToday">₹0</b></div>
+      </div>
+      <div id="budgetBox"></div>
+    </div>
+    <input class="search" id="search" type="search" placeholder="Search stores, restaurants, items, notes" hidden>
+    <div id="list"></div>
   </section>
 
-  <section class="card">
-    <form id="form" autocomplete="off" novalidate>
-      <div class="form-head">
-        <h2 id="formTitle">Add expense</h2>
-        <button type="button" class="scan" id="scanBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>Scan receipt</span>
-        </button>
-        <input type="file" id="scanFile" accept="image/*" hidden>
+  <!-- ============ CALENDAR ============ -->
+  <section id="tab-cal" role="tabpanel" hidden>
+    <div class="card">
+      <div class="cal-head">
+        <button class="cal-title" id="calTitle" type="button" aria-label="Pick month and year"><span id="calTitleText"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div class="cal-nav">
+          <button class="today-btn" id="calToday" type="button">Today</button>
+          <button class="icon-btn" id="calPrev" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <button class="icon-btn" id="calNext" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
       </div>
+      <div class="cal-week"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-sum" id="calSum"></div>
+    </div>
+    <div id="calDay"></div>
+  </section>
+
+  <!-- ============ INSIGHTS ============ -->
+  <section id="tab-stats" role="tabpanel" hidden>
+    <div class="seg" id="periodSeg" role="tablist">
+      <button type="button" data-p="day">Day</button>
+      <button type="button" data-p="week">Week</button>
+      <button type="button" data-p="month" aria-selected="true">Month</button>
+      <button type="button" data-p="year">Year</button>
+      <button type="button" data-p="custom">Custom</button>
+    </div>
+    <div class="period" id="periodNav">
+      <button class="icon-btn" id="pPrev" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <b id="pLabel"></b>
+      <button class="icon-btn" id="pNext" type="button" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+    <div class="custom" id="customRange" hidden>
+      <label class="field"><span>From</span><input type="date" id="cFrom"></label>
+      <label class="field"><span>To</span><input type="date" id="cTo"></label>
+    </div>
+    <div id="stats"></div>
+  </section>
+</main>
+
+<button class="fab" id="fab" type="button" aria-label="Add expense"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+
+<nav class="tabbar" aria-label="Sections">
+  <div class="tabbar-in" role="tablist">
+    <button class="tab" role="tab" data-tab="list" aria-selected="true" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>Expenses</button>
+    <button class="tab" role="tab" data-tab="cal" aria-selected="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</button>
+    <button class="tab" role="tab" data-tab="stats" aria-selected="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
+  </div>
+</nav>
+
+<!-- ============ ADD / EDIT SHEET ============ -->
+<dialog id="addDlg" aria-labelledby="addTitle">
+  <form class="sheet" id="addForm" autocomplete="off" novalidate>
+    <div class="grab"></div>
+    <div class="sheet-head">
+      <h2 id="addTitle">Add expense</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button type="button" class="scan" id="scanBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg><span class="scan-l">Scan receipt</span><span class="scan-s">Scan</span></button>
+        <button type="button" class="x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <input type="file" id="scanFile" accept="image/*" hidden>
+    </div>
+    <div class="sheet-body">
       <p class="status" id="scanStatus" aria-live="polite"></p>
-      <div class="lbl">
-        <label for="what" style="display:block">What was it for?</label>
+      <div class="field">
+        <label for="fWhat">What was it for?</label>
         <div class="ac-wrap">
-          <input id="what" placeholder="Store or item, e.g. DMart" enterkeyhint="next" autocapitalize="words"
+          <input id="fWhat" placeholder="Store or item, e.g. DMart" enterkeyhint="next" autocapitalize="words"
                  role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="acWhat">
           <div class="ac" id="acWhat" role="listbox"></div>
         </div>
       </div>
-      <div class="lbl" id="placeField" hidden>
-        <label for="place" style="display:block">Which restaurant?</label>
+      <div class="field" id="placeField" hidden>
+        <label for="fPlace">Which restaurant?</label>
         <div class="ac-wrap">
-          <input id="place" placeholder="e.g. Meghana Foods" enterkeyhint="next" autocapitalize="words"
+          <input id="fPlace" placeholder="e.g. Meghana Foods" enterkeyhint="next" autocapitalize="words"
                  role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="acPlace">
           <div class="ac" id="acPlace" role="listbox"></div>
         </div>
       </div>
-      <div class="row">
-        <label>Amount
-          <div class="money"><input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
-        </label>
-        <label>Date
-          <input id="date" type="date">
-        </label>
+      <div class="row2">
+        <label class="field"><span>Amount</span><div class="money"><input id="fAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" enterkeyhint="done"></div></label>
+        <label class="field"><span>Date</span><input id="fDate" type="date"></label>
       </div>
-      <div class="actions" id="actions">
-        <button type="submit" class="primary" id="submitBtn">Add expense</button>
-        <button type="button" class="secondary" id="cancelEdit" hidden>Cancel</button>
-        <button type="button" class="danger" id="deleteBtn" hidden aria-label="Delete expense" title="Delete">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
-        </button>
-      </div>
-    </form>
-  </section>
-
-  <section class="card">
-    <input class="search" id="search" type="search" placeholder="Search expenses" hidden>
-    <div id="list"></div>
-  </section>
-</main>
-
-<dialog id="receiptDlg" aria-labelledby="rTitle">
-  <div class="paper">
-    <div class="paper-head">
-      <div><h3 id="rTitle"></h3><p id="rSub"></p></div>
-      <button class="x" type="button" id="rClose" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <div class="field"><span>Category</span><div class="chips" id="fCats"></div></div>
+      <div class="field"><span>Paid with <span class="muted">(optional)</span></span><div class="chips wrap" id="fPay"></div></div>
+      <label class="field"><span>Note <span class="muted">(optional)</span></span><input id="fNote" placeholder="e.g. dinner with Arjun" autocapitalize="sentences"></label>
+      <button type="button" class="link" id="fItems" hidden></button>
     </div>
-    <div class="paper-body" id="rBody"></div>
-    <div class="paper-foot" id="rFoot"></div>
+    <div class="sheet-foot">
+      <button type="button" class="btn danger" id="fDelete" hidden aria-label="Delete expense" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>
+      <button type="submit" class="btn primary" id="fSave">Add expense</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============ RECEIPT ============ -->
+<dialog id="rcptDlg" class="center" aria-labelledby="rTitle">
+  <div class="sheet round">
+    <div class="sheet-head" style="border-bottom:1px dashed var(--line);padding-bottom:12px">
+      <div style="min-width:0"><h2 id="rTitle"></h2><p id="rSub"></p></div>
+      <button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body" id="rBody"></div>
+    <div class="sheet-foot" id="rFoot"></div>
+  </div>
+</dialog>
+
+<!-- ============ MONTH/YEAR PICKER ============ -->
+<dialog id="pickDlg" class="center" aria-label="Pick month">
+  <div class="sheet round">
+    <div class="sheet-head"><h2>Go to</h2><button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sheet-body picker">
+      <div class="picker-year">
+        <button class="icon-btn" id="pyPrev" type="button" aria-label="Previous year"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <input id="pyInput" type="number" inputmode="numeric" aria-label="Year">
+        <button class="icon-btn" id="pyNext" type="button" aria-label="Next year"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <div class="picker-months" id="pyMonths"></div>
+      <label class="field"><span>Or jump to a date</span><input type="date" id="pyDate"></label>
+    </div>
+  </div>
+</dialog>
+
+<!-- ============ ACCOUNT ============ -->
+<dialog id="acctDlg" aria-label="Account">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-head"><h2 id="acctTitle">Account</h2><button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sheet-body" id="acctBody"></div>
   </div>
 </dialog>
 
 <div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
+<input type="file" id="importFile" accept=".csv,text/csv" hidden>
 
-<script src="stores.js"></script>
-<script src="receipt.js"></script>
-<script>
-(() => {
-  const KEY = "expenses.v1";
-  const $ = (id) => document.getElementById(id);
-  const fmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
-  const fmt0 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-  const fmtSum = (v) => (v >= 1e5 ? fmt0 : fmt).format(v);
-  const r2 = (v) => Math.round(v * 100) / 100;
-  const ICON_RECEIPT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>';
-  const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
-
-  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-  const save = () => {
-    try { localStorage.setItem(KEY, JSON.stringify(items)); }
-    catch { toast("Couldn't save — your browser storage is full. Export a backup."); }
-  };
-  let items = load();
-  let lastDeleted = null, toastTimer = null, editingId = null, pendingReceipt = null;
-
-  const today = () => {
-    const d = new Date();
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  };
-  const resetDate = () => { $("date").value = today(); };
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
-  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-
-  // ---------- brand data ----------
-  const STORE_IDX = (window.STORES || []).map(([name, cat, india]) => ({
-    name, cat, india, n: norm(name), words: name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
-  }));
-  const FOOD_CATS = new Set(["Restaurant", "Fast food", "Cafe", "Dessert", "Bakery", "Pastry", "Food court", "Confectionery", "Chocolate", "Deli"]);
-  const DELIVERY = new Set(["swiggy", "zomato", "eatsure", "magicpin", "dunzo", "ubereats", "eatclub", "box8", "faasos", "behrouzbiryani"]);
-  STORE_IDX.forEach(s => { if (s.cat === "Food delivery") DELIVERY.add(s.n); });
-  const isDelivery = (what) => DELIVERY.has(norm(what));
-
-  // ---------- list ----------
-  function render() {
-    const q = $("search").value.trim().toLowerCase();
-    const t = today(), m = t.slice(0, 7);
-    $("monthTotal").textContent = fmtSum(items.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
-    $("todayTotal").textContent = fmtSum(items.filter(e => e.date === t).reduce((s, e) => s + e.amount, 0));
-    $("monthLabel").textContent = new Date(t + "T00:00").toLocaleDateString("en-IN", { month: "long" });
-    $("search").hidden = items.length < 2;
-
-    const shown = items
-      .filter(e => !q || e.what.toLowerCase().includes(q) || (e.place || "").toLowerCase().includes(q)
-        || (e.receipt?.items || []).some(i => i.n.toLowerCase().includes(q)))
-      .sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
-
-    if (!shown.length) {
-      $("list").innerHTML = `<p class="empty">${items.length ? "No matches." : "No expenses yet. Add your first one above."}</p>`;
-      return;
-    }
-    const groups = {};
-    shown.forEach(e => (groups[e.date.slice(0, 7)] ||= []).push(e));
-    $("list").innerHTML = Object.entries(groups).map(([month, list]) => {
-      const total = list.reduce((s, e) => s + e.amount, 0);
-      const label = new Date(month + "-01T00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-      return `<div class="month">
-        <div class="month-head"><span>${label}</span><span>${fmt.format(total)}</span></div>
-        <ul>${list.map(e => {
-          const d = new Date(e.date + "T00:00");
-          const n = (e.receipt?.items?.length || 0);
-          return `<li class="item${e.id === editingId ? " editing" : ""}" data-id="${e.id}" title="Tap to edit">
-            <div class="date"><b>${d.getDate()}</b>${d.toLocaleDateString("en-IN", { weekday: "short" })}</div>
-            <div class="what"><span>${esc(e.what)}</span>${e.place ? `<small>${esc(e.place)}</small>` : ""}</div>
-            <div class="amt">${fmt.format(e.amount)}</div>
-            <button class="rcpt${n ? " has" : ""}" type="button" data-receipt="${e.id}" aria-label="${n ? `Receipt, ${n} items` : "Receipt, add items"}" title="${n ? "View receipt" : "Add receipt items"}">${ICON_RECEIPT}</button>
-          </li>`;
-        }).join("")}</ul></div>`;
-    }).join("");
-  }
-
-  function toast(msg, undo) {
-    $("toastMsg").textContent = msg;
-    $("undoBtn").hidden = !undo;
-    $("toast").classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { $("toast").classList.remove("show"); lastDeleted = null; }, undo ? 5000 : 2500);
-  }
-
-  // ---------- add / edit ----------
-  function syncPlaceField() {
-    const show = isDelivery($("what").value);
-    $("placeField").hidden = !show;
-  }
-  $("form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const what = $("what").value.trim();
-    const amount = parseFloat($("amount").value);
-    if (!what) { $("what").focus(); return toast("Add what it was for"); }
-    if (!(amount > 0)) { $("amount").focus(); return toast("Enter an amount"); }
-    const place = isDelivery(what) ? $("place").value.trim() : "";
-    const fields = { date: $("date").value || today(), what, place, amount: r2(amount) };
-    if (!place) delete fields.place;
-    if (pendingReceipt) fields.receipt = pendingReceipt;
-    if (editingId) {
-      const e = items.find(x => x.id === editingId);
-      if (e) { Object.assign(e, fields); if (!place) delete e.place; }
-      toast("Saved");
-    } else {
-      items.push({ id: newId(), ...fields, created: Date.now() });
-      toast("Added");
-    }
-    save(); stopEdit(); render();
-  });
-
-  function startEdit(id) {
-    const e = items.find(x => x.id === id); if (!e) return;
-    editingId = id; pendingReceipt = null;
-    $("what").value = e.what; $("place").value = e.place || ""; $("amount").value = e.amount; $("date").value = e.date;
-    syncPlaceField();
-    $("formTitle").textContent = "Edit expense";
-    $("submitBtn").textContent = "Save changes";
-    $("cancelEdit").hidden = false; $("deleteBtn").hidden = false; $("actions").classList.add("editing");
-    setStatus("");
-    whatAc.close(); placeAc.close(); render();
-    $("form").scrollIntoView({ behavior: "smooth", block: "center" });
-    $("amount").focus({ preventScroll: true });
-  }
-  function stopEdit() {
-    editingId = null; pendingReceipt = null;
-    $("what").value = ""; $("place").value = ""; $("amount").value = ""; resetDate();
-    syncPlaceField();
-    $("formTitle").textContent = "Add expense";
-    $("submitBtn").textContent = "Add expense";
-    $("cancelEdit").hidden = true; $("deleteBtn").hidden = true; $("actions").classList.remove("editing");
-    setStatus("");
-    whatAc.close(); placeAc.close();
-  }
-  $("cancelEdit").addEventListener("click", () => { stopEdit(); render(); });
-  $("deleteBtn").addEventListener("click", () => {
-    const i = items.findIndex(e => e.id === editingId); if (i < 0) return;
-    lastDeleted = items.splice(i, 1)[0];
-    save(); stopEdit(); render(); toast("Deleted", true);
-  });
-
-  $("list").addEventListener("click", (ev) => {
-    const r = ev.target.closest("[data-receipt]");
-    if (r) return openReceipt(r.dataset.receipt);
-    const row = ev.target.closest("[data-id]");
-    if (row) startEdit(row.dataset.id);
-  });
-  $("undoBtn").addEventListener("click", () => {
-    if (lastDeleted) { items.push(lastDeleted); lastDeleted = null; save(); render(); }
-    $("toast").classList.remove("show");
-  });
-  $("search").addEventListener("input", render);
-
-  // ---------- receipt: view + edit ----------
-  const dlg = $("receiptDlg");
-  let rId = null, rEditing = false;
-
-  function openReceipt(id) {
-    const e = items.find(x => x.id === id); if (!e) return;
-    rId = id;
-    const hasAny = e.receipt?.items?.length || e.receipt?.extras?.length;
-    rEditing = !hasAny;
-    drawReceipt();
-    dlg.showModal();
-    $("rBody").scrollTop = 0;
-    if (rEditing) setTimeout(() => $("rBody").querySelector("input")?.focus(), 50);
-  }
-
-  function sums(list, extras) {
-    const sub = r2(list.reduce((s, i) => s + (i.p || 0), 0));
-    const tax = r2(extras.reduce((s, i) => s + (i.p || 0), 0));
-    return { sub, tax, calc: r2(sub + tax) };
-  }
-
-  function totalsHtml(e, list, extras) {
-    const { sub, tax, calc } = sums(list, extras);
-    const gap = r2(e.amount - calc);
-    let h = `<div class="totals">
-      <div class="ri"><span>Items subtotal</span><span class="p">${fmt.format(sub)}</span></div>
-      <div class="ri"><span>Tax &amp; charges</span><span class="p">${fmt.format(tax)}</span></div>`;
-    if ((list.length || extras.length) && Math.abs(gap) >= 0.5)
-      h += `<div class="ri gap"><span>${gap > 0 ? "Not itemised" : "Over the total by"}</span><span class="p">${fmt.format(Math.abs(gap))}</span></div>`;
-    h += `<div class="ri grand"><span>Total paid</span><span class="p">${fmt.format(e.amount)}</span></div></div>`;
-    if ((list.length || extras.length) && Math.abs(gap) >= 0.5)
-      h += `<button type="button" class="fix" data-act="usecalc">Set total paid to ${fmt.format(calc)}</button>`;
-    return h;
-  }
-
-  function drawReceipt() {
-    const e = items.find(x => x.id === rId); if (!e) return dlg.close();
-    const list = e.receipt?.items || [], extras = e.receipt?.extras || [];
-    const d = new Date(e.date + "T00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-    $("rTitle").textContent = e.place ? `${e.place}` : e.what;
-    $("rSub").textContent = (e.place ? `via ${e.what} · ` : "") + d;
-
-    if (!rEditing) {
-      let h = `<div class="sec-title">Items</div>`;
-      h += list.length ? list.map(i => `<div class="ri"><span class="n">${esc(i.n)}${i.q ? `<small>× ${i.q}</small>` : ""}</span><span class="p">${fmt.format(i.p)}</span></div>`).join("")
-                       : `<p class="none">No items added.</p>`;
-      h += `<div class="sec-title">Tax &amp; charges</div>`;
-      h += extras.length ? extras.map(i => `<div class="ri"><span class="n">${esc(i.n)}</span><span class="p">${fmt.format(i.p)}</span></div>`).join("")
-                         : `<p class="none">None.</p>`;
-      h += totalsHtml(e, list, extras);
-      $("rBody").innerHTML = h;
-      $("rFoot").innerHTML = `<button type="button" class="secondary" data-act="close">Close</button><button type="button" class="primary" data-act="edit">Edit items</button>`;
-      return;
-    }
-    // edit mode
-    const rows = list.length ? list : [{ n: "", p: "" }];
-    let h = `<div class="sec-title">Items</div>
-      <div class="er-head"><span>Item</span><span style="text-align:center">Qty</span><span>Price</span><span></span></div>
-      <div id="erItems">${rows.map(itemRow).join("")}</div>
-      <button type="button" class="add" data-act="additem">${ICON_PLUS}Add item</button>
-      <div class="sec-title">Tax &amp; charges</div>
-      <div id="erTax">${extras.map(taxRow).join("")}</div>
-      <button type="button" class="add" data-act="addtax">${ICON_PLUS}Add tax or charge</button>
-      <div id="erTotals"></div>`;
-    $("rBody").innerHTML = h;
-    $("rFoot").innerHTML = `<button type="button" class="secondary" data-act="cancel">Cancel</button><button type="button" class="primary" data-act="save">Save</button>`;
-    liveTotals();
-  }
-  const itemRow = (i) => `<div class="er">
-      <input class="nm" placeholder="Item name" value="${esc(i.n)}" autocapitalize="sentences">
-      <input class="q" type="number" inputmode="numeric" min="1" step="1" placeholder="1" value="${i.q ?? ""}" aria-label="Quantity">
-      <div class="money"><input class="pr" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${i.p ?? ""}" aria-label="Price"></div>
-      <button type="button" class="rm" data-act="rm" aria-label="Remove">${ICON_X}</button></div>`;
-  const taxRow = (i) => `<div class="er tax">
-      <input class="nm" placeholder="e.g. GST, delivery fee" value="${esc(i.n)}">
-      <div class="money"><input class="pr" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${i.p ?? ""}" aria-label="Amount"></div>
-      <button type="button" class="rm" data-act="rm" aria-label="Remove">${ICON_X}</button></div>`;
-
-  function readRows() {
-    const list = [...$("erItems").querySelectorAll(".er")].map(r => {
-      const n = r.querySelector(".nm").value.trim(), p = parseFloat(r.querySelector(".pr").value), q = parseInt(r.querySelector(".q").value, 10);
-      if (!n && !(p || p === 0)) return null;
-      const o = { n: n || "Item", p: r2(p || 0) }; if (q > 1) o.q = q; return o;
-    }).filter(Boolean);
-    const extras = [...$("erTax").querySelectorAll(".er")].map(r => {
-      const n = r.querySelector(".nm").value.trim(), p = parseFloat(r.querySelector(".pr").value);
-      if (!n && isNaN(p)) return null;
-      return { n: n || "Charge", p: r2(p || 0) };
-    }).filter(Boolean);
-    return { list, extras };
-  }
-  function liveTotals() {
-    const e = items.find(x => x.id === rId); if (!e) return;
-    const { list, extras } = readRows();
-    $("erTotals").innerHTML = totalsHtml(e, list, extras);
-  }
-
-  $("rBody").addEventListener("input", (ev) => { if (rEditing && ev.target.matches(".pr, .q")) liveTotals(); });
-  dlg.addEventListener("click", (ev) => {
-    if (ev.target === dlg) return dlg.close();
-    const act = ev.target.closest("[data-act]")?.dataset.act; if (!act) return;
-    const e = items.find(x => x.id === rId); if (!e) return;
-    if (act === "close") dlg.close();
-    else if (act === "edit") { rEditing = true; drawReceipt(); }
-    else if (act === "cancel") {
-      if (e.receipt?.items?.length || e.receipt?.extras?.length) { rEditing = false; drawReceipt(); } else dlg.close();
-    }
-    else if (act === "additem") { $("erItems").insertAdjacentHTML("beforeend", itemRow({ n: "", p: "" })); $("erItems").lastElementChild.querySelector(".nm").focus(); }
-    else if (act === "addtax") { $("erTax").insertAdjacentHTML("beforeend", taxRow({ n: "", p: "" })); $("erTax").lastElementChild.querySelector(".nm").focus(); }
-    else if (act === "rm") { ev.target.closest(".er").remove(); liveTotals(); }
-    else if (act === "usecalc") {
-      const src = rEditing ? readRows() : { list: e.receipt?.items || [], extras: e.receipt?.extras || [] };
-      e.amount = sums(src.list, src.extras).calc;
-      save(); render();
-      if (rEditing) liveTotals(); else drawReceipt();
-      toast("Total updated");
-    }
-    else if (act === "save") {
-      const { list, extras } = readRows();
-      if (list.length || extras.length) e.receipt = { items: list, extras }; else delete e.receipt;
-      save(); render();
-      if (e.receipt) { rEditing = false; drawReceipt(); } else dlg.close();
-      toast("Receipt saved");
-    }
-  });
-  $("rClose").addEventListener("click", () => dlg.close());
-  dlg.addEventListener("close", () => { rId = null; });
-
-  // ---------- autocomplete (instant, offline) ----------
-  function highlight(name, q) {
-    const i = name.toLowerCase().indexOf(q.toLowerCase());
-    return i < 0 ? esc(name) : esc(name.slice(0, i)) + "<b>" + esc(name.slice(i, i + q.length)) + "</b>" + esc(name.slice(i + q.length));
-  }
-  function rankStores(q, filter, exclude) {
-    const nq = norm(q), ql = q.toLowerCase().trim(), scored = [];
-    for (const s of STORE_IDX) {
-      if (exclude.has(s.n) || (filter && !filter(s))) continue;
-      const score = s.n === nq ? -1 : s.n.startsWith(nq) ? 0 : s.words.some(w => w.startsWith(ql) || w.startsWith(nq)) ? 1
-        : nq.length >= 3 && s.words.some(w => w.includes(nq)) ? 2 : null;
-      if (score === null) continue;
-      scored.push([score * 2 + (s.india ? 0 : 1), s]);
-    }
-    scored.sort((a, b) => a[0] - b[0] || a[1].name.length - b[1].name.length);
-    return scored.slice(0, 7).map(([, s]) => ({ name: s.name, sub: s.cat }));
-  }
-  function rankHistory(q, field) {
-    const nq = norm(q), counts = new Map();
-    items.forEach(e => { const v = e[field]; if (!v) return; const k = norm(v); const c = counts.get(k); counts.set(k, { name: c?.name || v, n: (c?.n || 0) + 1 }); });
-    const out = [...counts.entries()].filter(([k]) => k.includes(nq))
-      .sort((a, b) => (b[0].startsWith(nq) - a[0].startsWith(nq)) || b[1].n - a[1].n)
-      .slice(0, 4).map(([, v]) => ({ name: v.name, sub: v.n > 1 ? `${v.n}×` : "" }));
-    return { out, taken: new Set(counts.keys()) };
-  }
-
-  function makeAc(input, box, source, onPick) {
-    let opts = [], idx = -1;
-    const close = () => { box.classList.remove("open"); input.setAttribute("aria-expanded", "false"); idx = -1; };
-    const open = (q) => {
-      if (!norm(q)) return close();
-      const sections = source(q).filter(s => s.opts.length);
-      opts = sections.flatMap(s => s.opts); idx = -1;
-      if (!opts.length) return close();
-      let i = 0;
-      box.innerHTML = sections.map(s => `<div class="ac-sec">${esc(s.title)}</div>` + s.opts.map(o =>
-        `<div class="ac-opt" role="option" data-i="${i++}"><span>${highlight(o.name, q)}</span><small>${esc(o.sub)}</small></div>`).join("")).join("");
-      box.scrollTop = 0; box.classList.add("open"); input.setAttribute("aria-expanded", "true");
-    };
-    const pick = (i) => { const o = opts[i]; if (!o) return; input.value = o.name; close(); onPick(); };
-    input.addEventListener("input", () => open(input.value.trim()));
-    input.addEventListener("focus", () => { if (input.value.trim()) open(input.value.trim()); });
-    input.addEventListener("keydown", (ev) => {
-      if (!box.classList.contains("open")) return;
-      const els = box.querySelectorAll(".ac-opt");
-      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-        ev.preventDefault();
-        idx = (idx + (ev.key === "ArrowDown" ? 1 : -1) + els.length) % els.length;
-        els.forEach((el, i) => el.classList.toggle("active", i === idx));
-        els[idx].scrollIntoView({ block: "nearest" });
-      } else if (ev.key === "Enter") { ev.preventDefault(); if (idx >= 0) pick(idx); else { close(); onPick(); } }
-      else if (ev.key === "Escape" || ev.key === "Tab") close();
-    });
-    box.addEventListener("pointerdown", (ev) => { if (ev.target.closest(".ac-opt")) ev.preventDefault(); });
-    box.addEventListener("click", (ev) => { const el = ev.target.closest(".ac-opt"); if (el) pick(+el.dataset.i); });
-    input.addEventListener("blur", () => setTimeout(close, 150));
-    document.addEventListener("pointerdown", (ev) => { if (!box.parentElement.contains(ev.target)) close(); });
-    return { close };
-  }
-
-  const whatAc = makeAc($("what"), $("acWhat"), (q) => {
-    const h = rankHistory(q, "what");
-    return [{ title: "Your history", opts: h.out }, { title: "Stores", opts: rankStores(q, null, h.taken) }];
-  }, () => { syncPlaceField(); (isDelivery($("what").value) ? $("place") : $("amount")).focus(); });
-  const placeAc = makeAc($("place"), $("acPlace"), (q) => {
-    const h = rankHistory(q, "place");
-    return [{ title: "Your restaurants", opts: h.out }, { title: "Restaurants", opts: rankStores(q, s => FOOD_CATS.has(s.cat), h.taken) }];
-  }, () => $("amount").focus());
-  $("what").addEventListener("input", syncPlaceField);
-
-  // ---------- receipt scanning (on-device OCR) ----------
-  function setStatus(msg, ok) { const st = $("scanStatus"); st.textContent = msg; st.classList.toggle("ok", !!ok); }
-  let tesseractLoading = null;
-  function loadTesseract() {
-    if (window.Tesseract) return Promise.resolve();
-    return tesseractLoading ||= new Promise((ok, fail) => {
-      const sc = document.createElement("script");
-      sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-      sc.onload = ok; sc.onerror = () => { tesseractLoading = null; sc.remove(); fail(new Error("Couldn't load the receipt reader. Check your internet connection and try again.")); };
-      document.head.appendChild(sc);
-    });
-  }
-  async function prepImage(file) {
-    let src;
-    try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
-    catch { src = new Image(); src.src = URL.createObjectURL(file); await src.decode(); }
-    const w = src.width, h = src.height, scale = Math.min(1, 2000 / Math.max(w, h));
-    const c = document.createElement("canvas");
-    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
-    const g = c.getContext("2d", { willReadFrequently: true });
-    g.drawImage(src, 0, 0, c.width, c.height);
-    const px = g.getImageData(0, 0, c.width, c.height), d = px.data;
-    for (let i = 0; i < d.length; i += 4) {
-      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    g.putImageData(px, 0, 0);
-    return c;
-  }
-  $("scanBtn").addEventListener("click", () => $("scanFile").click());
-  $("scanFile").addEventListener("change", async (ev) => {
-    const file = ev.target.files[0]; ev.target.value = ""; if (!file) return;
-    const btn = $("scanBtn");
-    btn.disabled = true; setStatus("Loading receipt reader…");
-    try {
-      const [, img] = await Promise.all([loadTesseract(), prepImage(file)]);
-      const { data } = await Tesseract.recognize(img, "eng", {
-        logger: m => { if (m.status === "recognizing text") setStatus(`Reading receipt… ${Math.round(m.progress * 100)}%`); },
-      });
-      const r = parseReceipt(data.text || "");
-      const found = [];
-      if (r.store) {
-        if (isDelivery($("what").value) && !isDelivery(r.store)) { $("place").value = r.store; found.push("restaurant"); }
-        else { $("what").value = r.store; found.push("store"); }
-      }
-      if (r.amount) { $("amount").value = r.amount; found.push("amount"); }
-      if (r.date) { $("date").value = r.date; found.push("date"); }
-      syncPlaceField();
-      pendingReceipt = (r.items.length || r.extras.length) ? { items: r.items, extras: r.extras } : null;
-      if (pendingReceipt) found.push(`${r.items.length} item${r.items.length === 1 ? "" : "s"}`);
-      if (found.length) {
-        setStatus(`Found ${found.join(", ")}. Check, then tap ${editingId ? "Save changes" : "Add expense"}.`, true);
-        (r.amount ? $("submitBtn") : $("amount")).focus();
-      } else setStatus("Couldn't read this receipt. Try a flat, well-lit photo, or type it in.");
-    } catch (err) {
-      setStatus(err.message || "Something went wrong reading the receipt.");
-    } finally { btn.disabled = false; }
-  });
-
-  // ---------- CSV ----------
-  $("exportBtn").addEventListener("click", () => {
-    if (!items.length) return toast("Nothing to export yet");
-    const rows = [["date", "what", "restaurant", "amount", "items", "tax_and_charges"],
-      ...[...items].sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, e.what, e.place || "", e.amount,
-        (e.receipt?.items || []).map(i => `${i.n}${i.q ? " x" + i.q : ""}: ${i.p}`).join("; "),
-        (e.receipt?.extras || []).map(i => `${i.n}: ${i.p}`).join("; ")])];
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `expenses-${today()}.csv`;
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
-  $("importBtn").addEventListener("click", () => $("importFile").click());
-  $("importFile").addEventListener("change", async (ev) => {
-    const file = ev.target.files[0]; if (!file) return;
-    const rows = parseCSV(await file.text()); let added = 0;
-    const head = (rows[0] || []).map(h => h.trim().toLowerCase());
-    const col = (name, dflt) => { const i = head.indexOf(name); return i >= 0 ? i : dflt; };
-    const ci = { date: col("date", 0), what: col("what", 1), amount: col("amount", 2), place: col("restaurant", -1), items: col("items", col("receipt_items", -1)), tax: col("tax_and_charges", -1) };
-    const parseList = (s) => (s || "").split(";").map(x => x.trim()).filter(Boolean).map(x => {
-      const m = /^(.*?)(?:\s+x(\d+))?:\s*(-?[\d.]+)$/.exec(x); if (!m) return null;
-      const o = { n: m[1], p: parseFloat(m[3]) }; if (m[2]) o.q = +m[2]; return o;
-    }).filter(Boolean);
-    const seen = new Set(items.map(e => `${e.date}|${e.what}|${e.amount}`));
-    rows.slice(1).forEach(r => {
-      const date = r[ci.date], what = r[ci.what], amt = parseFloat(r[ci.amount]);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !what || !(amt > 0)) return;
-      const k = `${date}|${what}|${amt}`; if (seen.has(k)) return; seen.add(k);
-      const e = { id: newId(), date, what, amount: amt, created: Date.now() };
-      if (ci.place >= 0 && r[ci.place]) e.place = r[ci.place];
-      const li = ci.items >= 0 ? parseList(r[ci.items]) : [], tx = ci.tax >= 0 ? parseList(r[ci.tax]) : [];
-      if (li.length || tx.length) e.receipt = { items: li, extras: tx };
-      items.push(e); added++;
-    });
-    save(); render(); ev.target.value = "";
-    toast(`Imported ${added} expense${added === 1 ? "" : "s"}`);
-  });
-  function parseCSV(text) {
-    const rows = []; let row = [], cur = "", q = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (q) { if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
-      else if (c === '"') q = true;
-      else if (c === ",") { row.push(cur); cur = ""; }
-      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; }
-      else cur += c;
-    }
-    if (cur || row.length) { row.push(cur); rows.push(row); }
-    return rows;
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && !editingId && !$("amount").value && !$("what").value) { resetDate(); render(); }
-  });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-  resetDate(); render();
-})();
-</script>
+<script src="config.js?v=5"></script>
+<script src="stores.js?v=5"></script>
+<script src="receipt.js?v=5"></script>
+<script src="sync.js?v=5"></script>
+<script src="app.js?v=5.1"></script>
 </body>
 </html>
