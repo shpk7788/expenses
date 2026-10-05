@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Expenses</title>
+<meta name="description" content="Scan receipts, track spending, split bills.">
 <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,174 +12,21 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=5.1">
+<meta name="apple-mobile-web-app-title" content="Expenses">
+<script>try{var t=JSON.parse(localStorage.getItem("exp:theme")||"null");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="css/app.css?v=6">
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-in">
-    <h1 id="pageTitle">Expenses</h1>
-    <button class="acct-btn" id="acctBtn" type="button" aria-label="Account">
-      <span class="nm" id="acctName">Log in</span>
-      <span class="avatar" id="acctAvatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><i class="dot" id="syncDot"></i></span>
-    </button>
-  </div>
-</header>
-
-<main>
-  <!-- ============ EXPENSES ============ -->
-  <section id="tab-list" role="tabpanel">
-    <div class="card hero">
-      <div class="hero-top">
-        <div><div class="label" id="heroLabel">Spent this month</div><div class="big num" id="heroTotal">₹0</div></div>
-        <div class="side"><div class="label">Today</div><b class="num" id="heroToday">₹0</b></div>
-      </div>
-      <div id="budgetBox"></div>
-    </div>
-    <input class="search" id="search" type="search" placeholder="Search stores, restaurants, items, notes" hidden>
-    <div id="list"></div>
-  </section>
-
-  <!-- ============ CALENDAR ============ -->
-  <section id="tab-cal" role="tabpanel" hidden>
-    <div class="card">
-      <div class="cal-head">
-        <button class="cal-title" id="calTitle" type="button" aria-label="Pick month and year"><span id="calTitleText"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
-        <div class="cal-nav">
-          <button class="today-btn" id="calToday" type="button">Today</button>
-          <button class="icon-btn" id="calPrev" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-          <button class="icon-btn" id="calNext" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-        </div>
-      </div>
-      <div class="cal-week"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
-      <div class="cal-grid" id="calGrid"></div>
-      <div class="cal-sum" id="calSum"></div>
-    </div>
-    <div id="calDay"></div>
-  </section>
-
-  <!-- ============ INSIGHTS ============ -->
-  <section id="tab-stats" role="tabpanel" hidden>
-    <div class="seg" id="periodSeg" role="tablist">
-      <button type="button" data-p="day">Day</button>
-      <button type="button" data-p="week">Week</button>
-      <button type="button" data-p="month" aria-selected="true">Month</button>
-      <button type="button" data-p="year">Year</button>
-      <button type="button" data-p="custom">Custom</button>
-    </div>
-    <div class="period" id="periodNav">
-      <button class="icon-btn" id="pPrev" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-      <b id="pLabel"></b>
-      <button class="icon-btn" id="pNext" type="button" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-    </div>
-    <div class="custom" id="customRange" hidden>
-      <label class="field"><span>From</span><input type="date" id="cFrom"></label>
-      <label class="field"><span>To</span><input type="date" id="cTo"></label>
-    </div>
-    <div id="stats"></div>
-  </section>
-</main>
-
-<button class="fab" id="fab" type="button" aria-label="Add expense"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
-
-<nav class="tabbar" aria-label="Sections">
-  <div class="tabbar-in" role="tablist">
-    <button class="tab" role="tab" data-tab="list" aria-selected="true" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>Expenses</button>
-    <button class="tab" role="tab" data-tab="cal" aria-selected="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</button>
-    <button class="tab" role="tab" data-tab="stats" aria-selected="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
-  </div>
-</nav>
-
-<!-- ============ ADD / EDIT SHEET ============ -->
-<dialog id="addDlg" aria-labelledby="addTitle">
-  <form class="sheet" id="addForm" autocomplete="off" novalidate>
-    <div class="grab"></div>
-    <div class="sheet-head">
-      <h2 id="addTitle">Add expense</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button type="button" class="scan" id="scanBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg><span class="scan-l">Scan receipt</span><span class="scan-s">Scan</span></button>
-        <button type="button" class="x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <input type="file" id="scanFile" accept="image/*" hidden>
-    </div>
-    <div class="sheet-body">
-      <p class="status" id="scanStatus" aria-live="polite"></p>
-      <div class="field">
-        <label for="fWhat">What was it for?</label>
-        <div class="ac-wrap">
-          <input id="fWhat" placeholder="Store or item, e.g. DMart" enterkeyhint="next" autocapitalize="words"
-                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="acWhat">
-          <div class="ac" id="acWhat" role="listbox"></div>
-        </div>
-      </div>
-      <div class="field" id="placeField" hidden>
-        <label for="fPlace">Which restaurant?</label>
-        <div class="ac-wrap">
-          <input id="fPlace" placeholder="e.g. Meghana Foods" enterkeyhint="next" autocapitalize="words"
-                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="acPlace">
-          <div class="ac" id="acPlace" role="listbox"></div>
-        </div>
-      </div>
-      <div class="row2">
-        <label class="field"><span>Amount</span><div class="money"><input id="fAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" enterkeyhint="done"></div></label>
-        <label class="field"><span>Date</span><input id="fDate" type="date"></label>
-      </div>
-      <div class="field"><span>Category</span><div class="chips" id="fCats"></div></div>
-      <div class="field"><span>Paid with <span class="muted">(optional)</span></span><div class="chips wrap" id="fPay"></div></div>
-      <label class="field"><span>Note <span class="muted">(optional)</span></span><input id="fNote" placeholder="e.g. dinner with Arjun" autocapitalize="sentences"></label>
-      <button type="button" class="link" id="fItems" hidden></button>
-    </div>
-    <div class="sheet-foot">
-      <button type="button" class="btn danger" id="fDelete" hidden aria-label="Delete expense" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>
-      <button type="submit" class="btn primary" id="fSave">Add expense</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- ============ RECEIPT ============ -->
-<dialog id="rcptDlg" class="center" aria-labelledby="rTitle">
-  <div class="sheet round">
-    <div class="sheet-head" style="border-bottom:1px dashed var(--line);padding-bottom:12px">
-      <div style="min-width:0"><h2 id="rTitle"></h2><p id="rSub"></p></div>
-      <button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    <div class="sheet-body" id="rBody"></div>
-    <div class="sheet-foot" id="rFoot"></div>
-  </div>
-</dialog>
-
-<!-- ============ MONTH/YEAR PICKER ============ -->
-<dialog id="pickDlg" class="center" aria-label="Pick month">
-  <div class="sheet round">
-    <div class="sheet-head"><h2>Go to</h2><button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-    <div class="sheet-body picker">
-      <div class="picker-year">
-        <button class="icon-btn" id="pyPrev" type="button" aria-label="Previous year"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-        <input id="pyInput" type="number" inputmode="numeric" aria-label="Year">
-        <button class="icon-btn" id="pyNext" type="button" aria-label="Next year"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-      </div>
-      <div class="picker-months" id="pyMonths"></div>
-      <label class="field"><span>Or jump to a date</span><input type="date" id="pyDate"></label>
-    </div>
-  </div>
-</dialog>
-
-<!-- ============ ACCOUNT ============ -->
-<dialog id="acctDlg" aria-label="Account">
-  <div class="sheet">
-    <div class="grab"></div>
-    <div class="sheet-head"><h2 id="acctTitle">Account</h2><button class="x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-    <div class="sheet-body" id="acctBody"></div>
-  </div>
-</dialog>
-
-<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button></div>
-<input type="file" id="importFile" accept=".csv,text/csv" hidden>
-
-<script src="config.js?v=5.2"></script>
-<script src="stores.js?v=5"></script>
-<script src="receipt.js?v=5"></script>
-<script src="sync.js?v=5"></script>
-<script src="app.js?v=5.1"></script>
+<div id="auth" class="auth" hidden></div>
+<div id="app" hidden>
+  <nav id="nav" class="nav" aria-label="Main"></nav>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
+<noscript><p style="padding:20px">This app needs JavaScript.</p></noscript>
+<script src="config.js?v=6"></script>
+<script src="stores.js?v=6"></script>
+<script src="receipt.js?v=6"></script>
+<script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>
