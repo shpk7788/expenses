@@ -100,7 +100,11 @@ export const Api = {
   },
   async saveMeta(meta) {
     const res = await call("/auth/v1/user", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: meta }) });
-    if (res.ok) { const u = await res.json(); session.user.meta = u.user_metadata || meta; persist(); }
+    if (!res.ok) throw new Error("Couldn't save settings");
+  },
+  async fetchMeta() {
+    try { const res = await call("/auth/v1/user", { method: "GET" }); if (res.ok) return (await res.json()).user_metadata || {}; } catch {}
+    return null;
   },
   async loadMeta() {
     const res = await call("/auth/v1/user", { method: "GET" });

@@ -27,7 +27,7 @@ window.addEventListener("popstate", () => {
     return;
   }
   const top = stack.pop();
-  if (top) { top._viaPop = true; top.close(); }
+  if (top) { top._viaPop = true; top._animClose ? top._animClose() : top.close(); }
 });
 /**
  * sheet({ title, sub, body, foot, center, onClose }) → { el, body, foot, close }
@@ -41,7 +41,11 @@ export function sheet({ title = "", sub = "", body = "", foot = "", center = fal
     <button type="button" class="x" data-x aria-label="Close">${I.x}</button></div>
     <div class="sh-body">${body}</div>${foot ? `<div class="sh-foot">${foot}</div>` : ""}</div>`;
   document.body.appendChild(d);
-  d.addEventListener("click", (ev) => { if (ev.target === d || ev.target.closest("[data-x]")) d.close(); });
+  // animated close (slide/fade out), used by backdrop, ✕, Escape and Back
+  const animClose = () => { if (!d.open || d._closing) return; d._closing = true; d.classList.add("closing"); setTimeout(() => d.open && d.close(), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 190); };
+  d._animClose = animClose;
+  d.addEventListener("cancel", (ev) => { ev.preventDefault(); animClose(); });
+  d.addEventListener("click", (ev) => { if (ev.target === d || ev.target.closest("[data-x]")) animClose(); });
   d.addEventListener("close", () => {
     const i = stack.indexOf(d);
     if (i >= 0) stack.splice(i, 1);
@@ -50,7 +54,7 @@ export function sheet({ title = "", sub = "", body = "", foot = "", center = fal
   });
   d.showModal();
   stack.push(d); history.pushState({ sheet: stack.length }, "");
-  const api = { el: d, body: d.querySelector(".sh-body"), foot: d.querySelector(".sh-foot"), close: () => d.open && d.close(),
+  const api = { el: d, body: d.querySelector(".sh-body"), foot: d.querySelector(".sh-foot"), close: animClose,
     setTitle: (t) => { d.querySelector(".sh-head h2").textContent = t; } };
   return api;
 }
@@ -166,7 +170,7 @@ export function rowHtml(e, { dupes, selected, showDate = false, full = false } =
   else if (e.status === "failed") flags.push(`<span class="pill bad">Add details</span>`);
   if (isOffice(e) && !scanning && !full) flags.push(`<span class="pill open">Office</span>`);
   if (dupes?.has(e.id)) flags.push(`<span class="pill warn">${I.copy}Duplicate?</span>`);
-  const end = scanning ? `<span class="amt scanning-txt">…</span>` : `<span class="amt${isOffice(e) && !full ? " office" : ""}">${money(full ? e.amount : spendOf(e))}</span>`;
+  const end = scanning ? `<span class="amt scanning-txt">…</span>` : `<span class="amt${isOffice(e) && !full ? " office" : ""}">${money(spendOf(e))}</span>`;
   const sub2 = e.orig ? `<small>${esc(e.orig.cur)} ${+e.orig.amt}</small>` : e.split ? (full ? `<small>your share ${money(spendOf(e))}</small>` : `<small>of ${money(e.split.total)}</small>`) : "";
   const icons = [e.img && I.image, (e.receipt?.items?.length) && I.receipt, e.reportId && I.folder].filter(Boolean).slice(0, 2).join("");
   return `<li class="erow${scanning ? " scanning" : ""}${selected?.has(e.id) ? " sel" : ""}" data-id="${e.id}">
@@ -186,10 +190,10 @@ export function hydrateThumbs(root) {
 /** Group expenses: months → days */
 export function groupedHtml(list, opts = {}) {
   let html = "", curM = "", curD = "", rows = [];
-  const monthTot = {}; list.forEach(e => { const k = e.date.slice(0, 7); monthTot[k] = (monthTot[k] || 0) + (opts.full ? e.amount : mine(e)); });
+  const monthTot = {}; list.forEach(e => { const k = e.date.slice(0, 7); monthTot[k] = (monthTot[k] || 0) + (opts.full ? spendOf(e) : mine(e)); });
   const flush = () => {
     if (!rows.length) return;
-    const t = rows.reduce((s, e) => s + (opts.full ? e.amount : mine(e)), 0), off = opts.full ? 0 : rows.reduce((s, e) => s + (isOffice(e) ? spendOf(e) : 0), 0);
+    const t = rows.reduce((s, e) => s + (opts.full ? spendOf(e) : mine(e)), 0), off = opts.full ? 0 : rows.reduce((s, e) => s + (isOffice(e) ? spendOf(e) : 0), 0);
     html += `<div class="group"><div class="ghead"><span>${dayLabel(curD)}</span><span>${money(t)}${off ? ` <span class="office-note">+ ${money(off)} office</span>` : ""}</span></div><ul class="rows">${rows.map(e => rowHtml(e, opts)).join("")}</ul></div>`;
     rows = [];
   };

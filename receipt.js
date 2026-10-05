@@ -16,7 +16,7 @@
     const patterns = [
       /grand\s*total/i,
       /net\s*(amount|amt|payable|total|bill)/i,
-      /(amount|amt)\s*(payable|due|paid)/i,
+      /(amount|amt)\s*(payable|due)/i,
       /bill\s*(amount|amt|total)/i,
       /\btotal\b/i,
     ];
@@ -98,8 +98,8 @@
       const price = toNum(m[3]);
       if (!name || !(Math.abs(price) > 0) || skip.test(name)) continue;
       if (extra.test(name)) { extras.push({ n: name, p: /discount/i.test(name) ? -Math.abs(price) : price }); continue; }
-      const mid = (m[2].match(/\d+(?:\.\d+)?/g) || []).map(Number);
-      const q = mid.length && Number.isInteger(mid[0]) && mid[0] > 0 && mid[0] < 1000 ? mid[0] : null;
+      const tok = (m[2].match(/[\d.]+/g) || [])[0] || "";
+      const q = /^\d{1,3}$/.test(tok) && +tok > 0 ? +tok : null; // a quantity is a small whole number, never "20.00"
       items.push(q && q !== 1 ? { n: name, q, p: price } : { n: name, p: price });
     }
     return { items: items.slice(0, 100), extras: extras.slice(0, 20) };

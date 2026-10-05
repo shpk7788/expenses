@@ -1,5 +1,5 @@
 // Boot, routing, navigation, global event wiring.
-import { $, LS, I, esc, plural } from "./util.js";
+import { $, LS, I, LOGO, esc, plural, countUp, moneyHero } from "./util.js";
 import { Api } from "./api.js";
 import * as St from "./store.js";
 import { toast, sheet, go, anySheet, whenSettled } from "./ui.js";
@@ -10,7 +10,7 @@ import * as V2 from "./views2.js";
 const TABS = [["home", "Home", I.home], ["spend", "Spend", I.spend], ["create"], ["reports", "Reports", I.reports], ["account", "Account", I.account]];
 function drawNav() {
   const r = route().name, badge = St.expenses().filter(e => e.status === "review" || e.status === "failed").length + St.duplicates().size;
-  $("nav").innerHTML = `<div class="nav-in"><div class="brand"><span class="logo">₹</span><h1>Expenses</h1></div>${TABS.map(([k, l, ic]) => k === "create"
+  $("nav").innerHTML = `<div class="nav-in"><div class="brand"><span class="logo">${LOGO}</span><h1>Palli</h1></div>${TABS.map(([k, l, ic]) => k === "create"
     ? `<button type="button" class="nav-create" id="navCreate" aria-label="Create">${I.plus}<span class="lbl">Create</span></button>`
     : `<a class="nav-tab" href="#/${k}" ${r === k || (k === "spend" && r === "expense") || (k === "reports" && r === "report") || (k === "home" && r === "splits") ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${k === "home" && badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")}</div>`;
 }
@@ -39,8 +39,10 @@ function render() {
     default: V.home();
   }
   drawNav();
-  document.title = { home: "Expenses", spend: "Spend · Expenses", expense: "Expense", reports: "Reports · Expenses", report: "Report", splits: "Splits", account: "Account" }[r.name] || "Expenses";
-  if (changed) scrollTo(0, 0); else scrollTo(0, y);
+  document.title = { home: "Palli", spend: "Spend · Palli", expense: "Expense · Palli", reports: "Reports · Palli", report: "Report · Palli", splits: "Splits · Palli", account: "Account · Palli" }[r.name] || "Palli";
+  if (changed) { scrollTo(0, 0); const v = $("view"); v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); clearTimeout(render._t); render._t = setTimeout(() => v.classList.remove("enter"), 700); } else scrollTo(0, y);
+  // totals count up when they change
+  document.querySelectorAll("#view [data-count]").forEach(el => { const to = +el.dataset.count, key = r.name + el.className, from = render._counts?.[key] ?? (changed ? 0 : to); (render._counts ||= {})[key] = to; countUp(el, to, moneyHero, from); });
   if (keep) { const el = $(keep.id); if (el && "value" in el) { if (el.value !== keep.v) el.value = keep.v; el.focus({ preventScroll: true }); try { el.setSelectionRange(keep.s, keep.e); } catch {} } }
 }
 addEventListener("hashchange", () => { navs++; render._nav = true; render(); });
@@ -67,7 +69,7 @@ $("view").addEventListener("input", (ev) => { if (route().name === "spend") V.sp
 $("view").addEventListener("change", (ev) => { const r = route(); if (r.name === "expense") V.detailChange(ev, r.id); if (r.name === "spend") V.insChange(ev); if (r.name === "report") V2.reportChange(ev, r.id); });
 $("view").addEventListener("submit", (ev) => { const r = route(); if (r.name === "expense") V.detailSubmit(ev, r.id); });
 $("nav").addEventListener("click", (ev) => {
-  if (ev.target.closest("#navCreate")) { const r = route(); openCreate({ reportId: r.name === "report" ? r.id : undefined }); return; }
+  if (ev.target.closest("#navCreate")) { const r = route(); openCreate(r.name === "report" ? { reportId: r.id, pickExisting: () => V2.pickExpenses(r.id) } : {}); return; }
 });
 // Route every in-app link through go(), so a panel that is still closing can't undo the navigation
 document.addEventListener("click", (ev) => {
@@ -96,6 +98,6 @@ addEventListener("api:loggedout", () => { St.switchSpace(); gate(); toast("Pleas
 St.load(); St.applyTheme();
 gate();
 resumeScans();
-if (Api.user) { St.syncNow(); Api.loadMeta().then(() => { St.applyTheme(); St.emit(); }).catch(() => {}); }
+if (Api.user) { St.syncNow(); St.loadPrefs().catch(() => {}); }
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.__app = { St, Api };

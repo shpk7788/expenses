@@ -1,9 +1,9 @@
-# Expenses — app.snyp.io
+# Palli — app.snyp.io
 
 A personal expense tracker modelled on Expensify, built for India.
 
-**Home** — month spend, budget with "₹/day left", to-dos (receipts to review, possible duplicates, money friends owe you, reports to claim), recent expenses.
-**Create (+)** — Scan receipts (several at once; saved instantly and read in the background, photo + line items kept), Manual (any currency, converted to ₹ at that day's rate), Distance (km × ₹/km, round trips), Split with friends (equal or exact), New report.
+**Home** — month spend (counts up), overall + per-category budgets with "₹/day left" and over-budget alerts, to-dos (receipts to review, possible duplicates, money friends owe you, reports to claim), recent expenses.
+**Create (+)** — Fast manual entry (amount → merchant → Enter; date chips; extras under "More details"), Scan receipts (several at once; saved instantly and read in the background, photo + line items kept), Manual (any currency, converted to ₹ at that day's rate), Distance (km × ₹/km, round trips), Split with friends (equal or exact), New report.
 **Spend** — search across merchants, items, notes, tags and friends; filters for date (incl. Indian financial year), category, payment method, amount, receipt, report, type, status; bulk select → recategorise / add to report / export / delete. Calendar (any month of any year) and Insights (day/week/month/year/FY/custom).
 **Expense detail** — receipt photo, every field editable, itemised receipt with tax & charges, duplicate warnings, notes + automatic change history.
 **Reports** — group expenses, Open → Submitted → Reimbursed, CSV and printable PDF with receipt photos.
@@ -15,3 +15,6 @@ Plain HTML/CSS/ES modules (no build). Supabase for auth, data (`expenses` table,
 
 ## Setup
 Run `supabase/schema.sql` in the Supabase SQL editor, turn off *Confirm email*, and put the project URL + publishable key in `config.js`.
+
+## Testing
+End-to-end suite (Playwright, mocked Supabase/FX/OCR CDN) covers every feature on 320/390/768/1280px in light and dark: `node full.mjs <width> <light|dark> <label>`.

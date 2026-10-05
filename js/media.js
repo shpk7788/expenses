@@ -29,7 +29,7 @@ export function forgetUrl(key) { const u = urls.get(key); if (u) { URL.revokeObj
 export async function compress(file, max = 1600) {
   let src;
   try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
-  catch { src = new Image(); src.src = URL.createObjectURL(file); await src.decode(); }
+  catch { const u = URL.createObjectURL(file); src = new Image(); src.src = u; await src.decode(); setTimeout(() => URL.revokeObjectURL(u), 1000); }
   const w = src.width || src.naturalWidth, h = src.height || src.naturalHeight, k = Math.min(1, max / Math.max(w, h));
   const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
   c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);

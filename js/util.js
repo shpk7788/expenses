@@ -11,8 +11,11 @@ export const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t);
 
 const fmtINR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 const fmtINR0 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-export const money = (v) => fmtINR.format(v || 0);
-export const moneyBig = (v) => (Math.abs(v) >= 1e5 ? fmtINR0 : fmtINR).format(v || 0);
+/** ₹480 for whole amounts, ₹480.50 when there are paise */
+export const money = (v) => { v = Math.round((v || 0) * 100) / 100; return (Number.isInteger(v) ? fmtINR0 : fmtINR).format(v).replace(/^-/, "−"); };
+export const moneyBig = (v) => (Math.abs(v) >= 1e5 ? fmtINR0.format(Math.round(v || 0)) : money(v));
+/** Hero figure: rupees large, paise small */
+export const moneyHero = (v) => { const s = fmtINR.format(Math.round((v || 0) * 100) / 100), i = s.lastIndexOf("."); return i < 0 ? s : `${s.slice(0, i)}<small class="paise">${s.slice(i)}</small>`; };
 export const moneyIn = (v, cur) => { try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur, maximumFractionDigits: 2 }).format(v || 0); } catch { return `${cur} ${r2(v)}`; } };
 export function compact(v) {
   const s = v < 0 ? "-" : ""; v = Math.abs(v || 0);
@@ -63,6 +66,15 @@ export const LS = {
 
 // ---- icons (stroke, 24px grid) ----
 const sv = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+export const LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 20V5h5a4.75 4.75 0 0 1 0 9.5h-5"/></svg>';
+export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** Animate a number up to its value (premium feel on totals) */
+export function countUp(el, to, fmt, from = 0) {
+  if (reducedMotion() || Math.abs(to - from) < 1) { el.innerHTML = fmt(to); return; }
+  const t0 = performance.now(), dur = 750;
+  const step = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.innerHTML = fmt(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
 export const I = {
   home: sv('<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>'),
   spend: sv('<path d="M4 6h16M4 12h16M4 18h10"/>'),

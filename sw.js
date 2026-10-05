@@ -1,6 +1,6 @@
 // Offline support: network first (always fresh when online), cache as fallback.
-const CACHE = "expenses-v6.2";
-const FILES = ["./", "index.html", "css/app.css?v=6", "config.js?v=6", "stores.js?v=6", "receipt.js?v=6", "js/main.js?v=6",
+const CACHE = "palli-v7.1";
+const FILES = ["./", "index.html", "css/app.css?v=7", "config.js?v=7", "stores.js?v=7", "receipt.js?v=7", "js/main.js?v=7",
   "js/util.js", "js/cats.js", "js/api.js", "js/media.js", "js/store.js", "js/ui.js", "js/create.js", "js/views.js", "js/views2.js",
   "manifest.webmanifest", "icon.svg"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));

@@ -1,5 +1,5 @@
 // Creating & editing: + menu, expense form (manual/distance/edit), scanning, splits.
-import { $, esc, norm, r2, uuid, money, moneyIn, today, I, plural } from "./util.js";
+import { $, esc, norm, r2, uuid, money, moneyIn, today, addDays, dMed, I, plural } from "./util.js";
 import { CATS, cat, catFor, PAYS, CURRENCIES, CUR_NAMES, AUTO_FX, isDelivery, rankStores, FOOD_PLACE } from "./cats.js";
 import * as St from "./store.js";
 import { sheet, toast, autocomplete, pickList, pickCategory, go, confirmBox, promptBox, whenSettled } from "./ui.js";
@@ -19,6 +19,7 @@ export function openCreate(ctx = {}) {
   </div>` });
   s.el.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
+    if (a === "scan") { startScan(ctx); s.close(); return; } // file picker must open within the tap (iOS)
     s.close();
     whenSettled(() => {
       if (a === "scan") startScan(ctx);
@@ -93,22 +94,24 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
       <label class="field"><span>Vehicle</span><select id="dVeh"><option value="car">Car</option><option value="bike">Two-wheeler</option><option value="custom">Custom</option></select></label>
       <label class="field"><span>₹ per km</span><input id="dRate" type="number" inputmode="decimal" step="0.5" min="0" value="${esc(dist.rate)}"></label></div>
       <label class="inline-row"><span>Round trip<small>Doubles the distance</small></span><span class="switch"><input type="checkbox" id="dRound" ${dist.round ? "checked" : ""}><i></i></span></label>` : ""}
-    <div class="field"><span>${isDist ? "Amount" : "Amount"}</span>
-      <div class="amount-in"><button type="button" class="cur-btn" id="fCur">${esc(cur)}${I.down}</button>
-      <input id="fAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${esc(amtVal)}" aria-label="Amount"></div>
+    <div class="field"><div class="amount-in"><button type="button" class="cur-btn" id="fCur">${esc(cur)}${I.down}</button>
+      <input id="fAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${esc(amtVal)}" aria-label="Amount" enterkeyhint="next"></div>
       <div class="conv" id="fConv" hidden></div></div>
-    <div class="field"><label for="fWhat">${isDist ? "Description" : "Merchant"}</label><div><input id="fWhat" value="${esc(e.what)}" placeholder="${isDist ? "e.g. Client visit" : "Store, app or what it was for"}" autocapitalize="words" enterkeyhint="next"></div></div>
+    <div class="field"><label for="fWhat" class="sr">${isDist ? "Description" : "Merchant"}</label><div><input id="fWhat" value="${esc(e.what)}" placeholder="${isDist ? "What was the trip for?" : "Where? e.g. Swiggy, DMart, Rent"}" autocapitalize="words" enterkeyhint="done"></div></div>
     <div class="field" id="fPlaceF" hidden><label for="fPlace">Which restaurant?</label><div><input id="fPlace" value="${esc(e.place || "")}" placeholder="e.g. Meghana Foods" autocapitalize="words"></div></div>
-    <div><label class="field"><span>Date</span><input id="fDate" type="date" value="${esc(e.date)}"></label>
-    </div>
     <div class="field"><span>Category</span><div class="cat-quick" id="fCat"></div></div>
+    <div class="field"><span>Date</span><div class="chips wrap" id="fDates"><button type="button" class="chip" data-day="0">Today</button><button type="button" class="chip" data-day="-1">Yesterday</button>
+      <label class="chip date-chip" id="fDateChip">${I.cal}<span id="fDateLbl">Other date</span><input id="fDate" type="date" value="${esc(e.date)}" aria-label="Pick a date"></label></div></div>
+    <button type="button" class="more-toggle" id="fMore" aria-expanded="false"><span>More details</span><small id="fMoreSum"></small>${I.down}</button>
+    <div id="fMoreBox" class="more-box" hidden>
     <div class="field"><span>Paid with</span><div class="chips wrap" id="fPay">${PAYS.map(p => `<button type="button" class="chip" data-pay="${esc(p)}" aria-pressed="${e.pay === p}">${esc(p)}</button>`).join("")}</div></div>
     <label class="field"><span>Description <span class="muted">(optional)</span></span><input id="fNote" value="${esc(e.note || "")}" placeholder="e.g. dinner with Arjun" autocapitalize="sentences"></label>
     <label class="field"><span>Tags <span class="muted">(optional, comma separated)</span></span><input id="fTags" value="${esc((e.tags || []).join(", "))}" placeholder="e.g. work, goa-trip" autocapitalize="none"></label>
     <label class="field"><span>Report</span><select id="fRep"><option value="">None</option>${reportsOpen.map(r => `<option value="${r.id}" ${r.id === e.reportId ? "selected" : ""}>${esc(r.name)}</option>`).join("")}<option value="__new">+ New report…</option></select></label>
     <label class="inline-row"><span>Reimbursable<small>Someone pays you back — not counted in your spending</small></span><span class="switch"><input type="checkbox" id="fReimb" ${e.reimb ? "checked" : ""}><i></i></span></label>
+    </div>
     <p class="err" id="fErr"></p>`,
-    foot: `${ex ? `<button type="button" class="btn danger icon" id="fDel" aria-label="Delete">${I.trash}</button>` : ""}<button type="button" class="btn primary" id="fSave">${ex ? "Save" : "Add expense"}</button>` });
+    foot: `${ex ? `<button type="button" class="btn danger icon" id="fDel" aria-label="Delete">${I.trash}</button>` : ""}<button type="button" class="btn primary" id="fSave">${ex ? "Save" : "Add expense"}</button>` , cls: "form-sheet" });
   const $$ = (sel) => s.el.querySelector(sel);
   const amt = $$("#fAmt"), what = $$("#fWhat"), place = $$("#fPlace");
 
@@ -123,8 +126,26 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   if (!ex && isDist) catId = "transport";
   drawCat(); syncPlace();
 
-  autocomplete(what, whatSource, (picked) => { syncPlace(); autoCat(); (isDelivery(what.value) ? place : $$("#fDate")).focus(); });
-  autocomplete(place, placeSource, () => $$("#fDate").focus());
+  // fast entry: Enter on amount → merchant; picking/Enter on merchant → done (or restaurant)
+  autocomplete(what, whatSource, (picked) => { syncPlace(); autoCat(); if (isDelivery(what.value) && !place.value) place.focus(); else if (!picked && parseFloat(amt.value) > 0) $$("#fSave").click(); else what.blur(); });
+  autocomplete(place, placeSource, (picked) => { if (!picked && parseFloat(amt.value) > 0) $$("#fSave").click(); else place.blur(); });
+  amt.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); what.focus(); } });
+  // date chips
+  const drawDates = () => {
+    const d = $$("#fDate").value || today(), t = today(), y = addDays(t, -1);
+    $$("#fDates").querySelectorAll("[data-day]").forEach(b => b.setAttribute("aria-pressed", (b.dataset.day === "0" ? t : y) === d));
+    const other = d !== t && d !== y; $$("#fDateChip").setAttribute("aria-pressed", other); $$("#fDateLbl").textContent = other ? dMed(d) : "Other date";
+  };
+  $$("#fDates").addEventListener("click", (ev) => { const b = ev.target.closest("[data-day]"); if (!b) return; $$("#fDate").value = addDays(today(), +b.dataset.day); $$("#fDate").dispatchEvent(new Event("change")); });
+  $$("#fDate").addEventListener("change", drawDates); drawDates();
+  // more details
+  const moreSum = () => { const bits = [s.el.querySelector('[data-pay][aria-pressed="true"]')?.dataset.pay, $$("#fNote").value && "note", $$("#fTags").value && "tags", $$("#fRep").value && $$("#fRep").value !== "__new" && $$("#fRep").selectedOptions[0]?.text, $$("#fReimb").checked && "reimbursable"].filter(Boolean); $$("#fMoreSum").textContent = bits.join(" · "); };
+  const setMore = (open) => { $$("#fMoreBox").hidden = !open; $$("#fMore").setAttribute("aria-expanded", open); };
+  $$("#fMore").onclick = () => setMore($$("#fMoreBox").hidden);
+  s.body.addEventListener("change", moreSum); s.body.addEventListener("click", (ev) => { if (ev.target.closest("[data-pay]")) setTimeout(moreSum); });
+  moreSum(); if (ex && (e.note || e.tags?.length || e.reportId || e.reimb)) setMore(true);
+  const saveLbl = () => { if (!ex) { const a = parseFloat(amt.value); $$("#fSave").textContent = a > 0 && cur === "INR" ? `Add ${money(a)}` : "Add expense"; } };
+  amt.addEventListener("input", saveLbl); saveLbl();
   what.addEventListener("input", () => { syncPlace(); autoCat(); });
   $$("#fCat").onclick = async (ev) => {
     const b = ev.target.closest("[data-cat]"); if (!b) return;
@@ -178,9 +199,10 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   const err = (m) => { $$("#fErr").textContent = m; };
   $$("#fSave").onclick = () => {
     const a = parseFloat(amt.value), w = what.value.trim();
-    if (!(a > 0)) { err("Enter an amount."); amt.focus(); return; }
+    if (!(a > 0)) { err("Enter an amount."); amt.focus(); s.el.querySelector(".amount-in").classList.remove("shake"); void amt.offsetWidth; s.el.querySelector(".amount-in").classList.add("shake"); return; }
     if (!w && !isDist) { err("Add a merchant or what it was for."); what.focus(); return; }
     if (cur !== "INR" && !(rate > 0)) { err(`Enter the ${cur} → ₹ exchange rate.`); $$("#fRate")?.focus(); return; }
+    navigator.vibrate?.(8);
     const payBtn = s.el.querySelector('[data-pay][aria-pressed="true"]');
     const tags = $$("#fTags").value.split(",").map(t => t.trim().replace(/^#/, "")).filter(Boolean);
     const patch = {
@@ -205,7 +227,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
     const copy = St.remove(ex.id); s.close(); toast("Expense deleted", () => St.restore(copy));
     if (location.hash.startsWith("#/expense/")) go("#/spend");
   });
-  setTimeout(() => { (focus === "what" ? what : focus === "date" ? $$("#fDate") : focus ? amt : (ex ? amt : isDist ? $$("#dKm") : amt)).focus(); }, 80);
+  setTimeout(() => { (focus === "what" ? what : focus === "date" ? $$("#fDate") : focus ? amt : (ex ? amt : isDist ? $$("#dKm") : amt)).focus(); }, 60);
 }
 
 // ---------- scanning (non-blocking, queue) ----------
@@ -263,7 +285,7 @@ async function runQueue() {
       const r = window.parseReceipt(data.text || "");
       const e = St.get(job.id); if (!e || e.deleted) continue;
       const receipt = (r.items.length || r.extras.length) ? { items: r.items, extras: r.extras } : undefined;
-      if (job.mode === "items") { if (receipt) { St.update(e.id, { receipt }, { log: false }); toast(`Read ${plural(r.items.length, "item")} from the receipt`); } continue; }
+      if (job.mode === "items" || e.status !== "scanning") { if (receipt && !e.receipt?.items?.length) { St.update(e.id, { receipt }, { log: false }); if (job.mode === "items") toast(`Read ${plural(r.items.length, "item")} from the receipt`); } continue; }
       const patch = { status: r.amount ? "review" : "failed", receipt };
       if (r.store && !e.what) { patch.what = r.store; patch.cat = catFor(r.store, St.prefs().rules); }
       if (r.amount && !e.amount) patch.amount = r.amount;
@@ -433,8 +455,9 @@ export function openSettle(name, balance) {
   };
   s.el.querySelector("#stUpi")?.addEventListener("click", async () => {
     const text = `${msg}\n${upiLink}`;
-    if (navigator.share) { try { await navigator.share({ text }); return; } catch {} }
-    try { await navigator.clipboard.writeText(text); toast("Payment request copied"); } catch { toast(upiLink); }
+    if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === "AbortError") return; } }
+    const c = sheet({ title: "Payment request", center: true, body: `<textarea readonly id="upiTxt" style="min-height:110px">${esc(text)}</textarea>`, foot: `<button class="btn primary" id="upiCopy">Copy</button>` });
+    c.el.querySelector("#upiCopy").onclick = async () => { const t = c.el.querySelector("#upiTxt"); t.select(); try { await navigator.clipboard.writeText(text); } catch { document.execCommand("copy"); } toast("Copied"); c.close(); };
   });
   s.el.querySelector("#stWa")?.addEventListener("click", () => window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener"));
 }

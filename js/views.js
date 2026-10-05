@@ -1,5 +1,5 @@
 // Home, Spend (list / calendar / insights), Expense detail.
-import { $, esc, norm, r2, money, moneyBig, moneyIn, compact, today, addDays, addMonths, diffDays, parse, ymd, daysIn, weekStart, fyStart, monthStart, monthEnd,
+import { $, esc, norm, r2, money, moneyBig, moneyHero, moneyIn, compact, today, addDays, addMonths, diffDays, parse, ymd, daysIn, weekStart, fyStart, monthStart, monthEnd,
   MONTHS, dLong, dMed, dShort, dayLabel, timeAgo, plural, I, pad } from "./util.js";
 import { CATS, cat, PAYS } from "./cats.js";
 import * as St from "./store.js";
@@ -21,14 +21,18 @@ export function home() {
   const month = all.filter(e => e.date.startsWith(m)).reduce((s, e) => s + St.mine(e), 0);
   const todayTot = all.filter(e => e.date === t).reduce((s, e) => s + St.mine(e), 0);
   const officeMonth = all.filter(e => e.date.startsWith(m) && St.isOffice(e)).reduce((s, e) => s + St.spendOf(e), 0);
+  const d0 = new Date(), daysLeft = daysIn(d0.getFullYear(), d0.getMonth()) - d0.getDate() + 1;
   let budget = "";
   if (P.budget > 0) {
-    const left = P.budget - month, pct = Math.min(100, month / P.budget * 100), d = new Date(), dl = daysIn(d.getFullYear(), d.getMonth()) - d.getDate() + 1;
-    budget = `<div class="bar${left < 0 ? " over" : ""}" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-      <div class="budget-line">${left >= 0 ? `<span><b>${moneyBig(left)}</b> left of ${moneyBig(P.budget)}</span><span>≈ <b>${moneyBig(Math.floor(left / dl))}</b>/day · ${plural(dl, "day")} left</span>`
-        : `<span style="color:var(--danger)"><b style="color:inherit">${moneyBig(-left)}</b> over your ${moneyBig(P.budget)} budget</span>`}</div>`;
-  } else budget = `<div><button type="button" class="link" data-act="budget">${I.plus}Set a monthly budget</button></div>`;
-
+    const left = P.budget - month, pct = Math.min(100, month / P.budget * 100);
+    budget = `<div class="hbar${left < 0 ? " over" : pct > 85 ? " warn" : ""}" role="progressbar" aria-label="Monthly budget used" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="--w:${pct}%"></i></div>
+      <div class="hero-foot">${left >= 0 ? `<span><b>${moneyBig(left)}</b> left of ${moneyBig(P.budget)}</span><span><b>${moneyBig(Math.floor(left / daysLeft))}</b>/day for ${plural(daysLeft, "day")}</span>`
+        : `<span><b>${moneyBig(-left)}</b> over your ${moneyBig(P.budget)} budget</span>`}</div>`;
+  } else budget = `<button type="button" class="hero-link" data-act="budget">${I.plus}Set a monthly budget</button>`;
+  // per-category budgets
+  const catSpent = {}; all.filter(e => e.date.startsWith(m)).forEach(e => catSpent[e.cat] = (catSpent[e.cat] || 0) + St.mine(e));
+  const cb = Object.entries(P.catBudgets || {}).filter(([, v]) => v > 0);
+  const budgetRows = cb.map(([id, lim]) => ({ id, lim, spent: catSpent[id] || 0, pct: (catSpent[id] || 0) / lim * 100 })).sort((a, b) => b.pct - a.pct);
   // to-dos
   const todo = [];
   const scanning = all.filter(e => e.status === "scanning").length, review = all.filter(e => e.status === "review" || e.status === "failed").length;
@@ -42,17 +46,21 @@ export function home() {
     const claim = St.claimOf(r);
     if (claim > 0) todo.push({ ic: I.folder, cls: r.status === "submitted" ? "good" : "", t: r.status === "submitted" ? `Waiting on ${money(claim)}` : `${money(claim)} to claim`, s: `Report · ${r.name}`, go: `#/report/${r.id}` });
   }
+  for (const b of budgetRows) {
+    if (b.pct > 100) todo.push({ ic: I.alert, cls: "bad", t: `${cat(b.id).name} is ${money(b.spent - b.lim)} over budget`, s: `${money(b.spent)} of ${money(b.lim)} this month`, go: "#/spend?v=insights" });
+    else if (b.pct >= 85) todo.push({ ic: I.alert, t: `${cat(b.id).name}: ${Math.round(b.pct)}% of budget used`, s: `${money(b.lim - b.spent)} left for ${plural(daysLeft, "day")}`, go: "#/spend?v=insights" });
+  }
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
   const recent = [...all].sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 5);
-  const catMonth = {}; all.filter(e => e.date.startsWith(m)).forEach(e => catMonth[e.cat] = (catMonth[e.cat] || 0) + St.mine(e));
-  const topCats = Object.entries(catMonth).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const topCats = Object.entries(catSpent).filter(([id, v]) => v > 0 && !(P.catBudgets || {})[id]).sort((a, b) => b[1] - a[1]).slice(0, budgetRows.length ? 3 : 4);
   const hi = Api.user ? `Hi, ${esc(Api.user.username)}` : "Home";
 
   $("view").innerHTML = top(hi, { right: syncPill() }) + `
-    <section class="card hero" aria-label="This month">
-      <div class="hero-row"><div><div class="label">Your spending in ${MONTHS[new Date().getMonth()]}</div><div class="big num">${moneyBig(month)}</div></div>
-      <div class="hero-side"><div class="label">Today</div><b class="num">${moneyBig(todayTot)}</b></div></div>${budget}
-      ${officeMonth ? `<button type="button" class="office-line" data-go="#/reports"><span>Office &amp; reimbursable (not counted)</span><b>${moneyBig(officeMonth)}</b></button>` : ""}
+    <section class="hero-card" aria-label="This month">
+      <div class="hero-top"><span>Spent in ${MONTHS[new Date().getMonth()]}</span><span class="hero-pill">Today <b>${moneyBig(todayTot)}</b></span></div>
+      <div class="hero-big num" data-count="${month}">${moneyHero(month)}</div>
+      ${budget}
+      ${officeMonth ? `<button type="button" class="hero-office" data-go="#/reports"><span>Office &amp; reimbursable · not counted</span><b>${moneyBig(officeMonth)}</b></button>` : ""}
     </section>
     <div class="quick">
       <button type="button" data-q="scan"><span class="i">${I.scan}</span>Scan</button>
@@ -62,10 +70,14 @@ export function home() {
     </div>
     <div class="sec-h">To-do</div>
     <div class="todo">${todo.length ? todo.map(x => `<button type="button" data-go="${x.go}"><span class="ti ${x.cls || ""}">${x.ic}</span><span><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span><span class="chev">${I.right}</span></button>`).join("")
-      : `<button type="button" data-q="scan" style="cursor:default"><span class="ti good">${I.check}</span><span><b>You're all caught up</b><small>Nothing needs your attention</small></span><span></span></button>`}</div>
-    ${topCats.length ? `<div class="sec-h">This month<button type="button" data-go="#/spend?v=insights">Insights</button></div><div class="card"><div class="brk">${topCats.map(([id, v]) => { const c = cat(id); return `
-      <div class="brk-row"><div class="cat-ico" style="background:${c.color}22">${c.emoji}</div><div style="min-width:0"><div class="t"><span>${esc(c.name)}</span><span>${Math.round(v / month * 100)}%</span></div>
-      <div class="bar"><i style="width:${(v / topCats[0][1] * 100).toFixed(1)}%;background:${c.color}"></i></div></div><div class="amt">${moneyBig(v)}</div></div>`; }).join("")}</div></div>` : ""}
+      : `<button type="button" style="cursor:default" tabindex="-1"><span class="ti good">${I.check}</span><span><b>You're all caught up</b><small>Nothing needs your attention</small></span><span></span></button>`}</div>
+    ${budgetRows.length ? `<div class="sec-h">Budgets<button type="button" data-act="budget">Edit</button></div><div class="card"><div class="brk">${budgetRows.map(b => { const c = cat(b.id), left = b.lim - b.spent; return `
+      <div class="brk-row"><div class="cat-ico" style="background:${c.color}22">${c.emoji}</div><div style="min-width:0"><div class="t"><span>${esc(c.name)}</span><span class="${b.pct > 100 ? "bal-neg" : ""}">${left >= 0 ? `${moneyBig(left)} left` : `${moneyBig(-left)} over`}</span></div>
+      <div class="bar ${b.pct > 100 ? "over" : b.pct >= 85 ? "warn" : ""}"><i style="--w:${Math.min(100, b.pct).toFixed(1)}%"></i></div><div class="sub">${moneyBig(b.spent)} of ${moneyBig(b.lim)}</div></div></div>`; }).join("")}</div></div>` : ""}
+    ${topCats.length ? `<div class="sec-h">${budgetRows.length ? "Other spending" : "Where it went"}<button type="button" data-go="#/spend?v=insights">Insights</button></div><div class="card"><div class="brk">${topCats.map(([id, v]) => { const c = cat(id); return `
+      <div class="brk-row"><div class="cat-ico" style="background:${c.color}22">${c.emoji}</div><div style="min-width:0"><div class="t"><span>${esc(c.name)}</span><span>${Math.round(v / Math.max(month, 1) * 100)}% of spending</span></div>
+      <div class="bar share"><i style="--w:${(v / Math.max(month, 1) * 100).toFixed(1)}%;background:${c.color}"></i></div></div><div class="amt">${moneyBig(v)}</div></div>`; }).join("")}</div>
+      ${budgetRows.length ? "" : `<button type="button" class="link" data-act="budget" style="margin-top:10px">${I.plus}Set budgets for categories</button>`}</div>` : ""}
     <div class="sec-h">Recent<button type="button" data-go="#/spend">See all</button></div>
     ${recent.length ? `<div class="group"><ul class="rows">${recent.map(e => rowHtml(e, { dupes, showDate: true })).join("")}</ul></div>`
       : `<div class="card empty"><b>No expenses yet</b>Scan a receipt or add one manually to get started.<br><button type="button" class="btn primary" data-q="scan">${I.scan}Scan a receipt</button></div>`}`;
@@ -76,11 +88,27 @@ export function homeClick(ev) {
   if (q === "scan") startScan(); else if (q === "manual") openForm(); else if (q === "distance") openForm({ type: "distance" }); else if (q === "split") openSplit();
   if (ev.target.closest("[data-act=budget]")) editBudget();
 }
+/** Budgets: one overall monthly limit + optional limits per category */
 export async function editBudget() {
-  const { promptBox } = await import("./ui.js");
-  const v = await promptBox({ title: "Monthly budget", label: "Amount per month (₹)", value: St.prefs().budget || "", type: "number", inputmode: "decimal", placeholder: "e.g. 30000" });
-  if (v === null) return;
-  const n = parseFloat(v); St.setPrefs({ budget: n > 0 ? Math.round(n) : 0 }); toast(n > 0 ? "Budget saved" : "Budget removed");
+  const P = St.prefs(), m = today().slice(0, 7), spent = {};
+  St.expenses().filter(e => e.date.startsWith(m)).forEach(e => spent[e.cat] = (spent[e.cat] || 0) + St.mine(e));
+  const { CATS: list } = await import("./cats.js");
+  const order = [...list].sort((a, b) => (spent[b.id] || 0) - (spent[a.id] || 0));
+  const s = sheet({ title: "Budgets", sub: "Monthly limits. Leave blank for no limit.", body: `
+    <label class="field"><span>Total for the month</span><div class="money"><input id="bAll" type="number" inputmode="numeric" min="0" step="500" value="${P.budget || ""}" placeholder="e.g. 40000"></div></label>
+    <div class="sec-h" style="margin:4px 0 -4px">By category</div>
+    <div class="bud-list">${order.map(c => `<label class="bud-row"><span class="cat-ico" style="background:${c.color}22">${c.emoji}</span><span class="bud-n">${esc(c.name)}<small>${spent[c.id] ? `${moneyBig(spent[c.id])} so far` : "Nothing yet"}</small></span>
+      <span class="money"><input type="number" inputmode="numeric" min="0" step="100" data-cb="${c.id}" value="${(P.catBudgets || {})[c.id] || ""}" placeholder="—" aria-label="${esc(c.name)} budget"></span></label>`).join("")}</div>
+    <p class="muted small" id="bSum" style="margin:0"></p>`,
+    foot: `<button type="button" class="btn primary" id="bOk">Save budgets</button>` });
+  const sum = () => { const t = [...s.el.querySelectorAll("[data-cb]")].reduce((a, i) => a + (parseFloat(i.value) || 0), 0), all = parseFloat(s.el.querySelector("#bAll").value) || 0;
+    s.el.querySelector("#bSum").textContent = t ? `Category budgets add up to ${moneyBig(t)}${all && t > all ? ` — more than your ${moneyBig(all)} total` : ""}.` : ""; };
+  s.body.addEventListener("input", sum); sum();
+  s.el.querySelector("#bOk").onclick = () => {
+    const cbs = {}; s.el.querySelectorAll("[data-cb]").forEach(i => { const v = Math.round(parseFloat(i.value)); if (v > 0) cbs[i.dataset.cb] = v; });
+    const all = Math.round(parseFloat(s.el.querySelector("#bAll").value)) || 0;
+    St.setPrefs({ budget: all > 0 ? all : 0, catBudgets: cbs }); s.close(); toast("Budgets saved");
+  };
 }
 
 // =============== SPEND ===============
@@ -125,7 +153,8 @@ function applyFilters(list, f, dupes) {
 }
 const activeCount = (f) => [f.date.p !== "all", f.cats.length, f.pays.length, f.min !== "" || f.max !== "", f.receipt !== "any", f.reimb, f.report !== "any", f.types.length, f.status !== "any", f.tag].filter(Boolean).length;
 export function spendParams(params) {
-  if (params.get("v")) SP.mode = params.get("v");
+  SP.mode = params.get("v") || (params.get("f") || params.get("tag") ? "list" : SP.mode);
+  if (!params.get("f") && !params.get("tag")) { SP.f.status = "any"; SP.f.tag = ""; } // shortcut filters don't stick around
   const f = params.get("f");
   if (f === "review" || f === "dupes") { SP.f = F0(); SP.f.status = f; SP.mode = "list"; }
   if (params.get("tag")) { SP.f = F0(); SP.f.tag = params.get("tag"); SP.mode = "list"; }
@@ -184,19 +213,19 @@ async function bulkAction(ev) {
   if (!ids.length) return toast("Select some expenses first");
   if (b === "cat") {
     const v = await pickCategory({ title: `Category for ${plural(ids.length, "expense")}` });
-    if (v) { ids.forEach(id => St.update(id, { cat: v })); toast(`Moved ${plural(ids.length, "expense")} to ${cat(v).name}`); }
+    if (v) { St.saveMany(ids.map(id => ({ ...St.get(id), cat: v }))); toast(`Moved ${plural(ids.length, "expense")} to ${cat(v).name}`); }
   } else if (b === "report") {
     const rs = St.activeReports();
     const v = await pickList({ title: "Add to report", options: [...rs.map(r => ({ value: r.id, label: r.name, sub: plural(St.inReport(r.id).length, "expense") })), { value: "__new", label: "+ New report" }, { value: "__none", label: "Remove from report" }] });
     if (!v) return;
     let rid = v; if (v === "__new") { const r = await newReport(); if (!r) return; rid = r.id; }
-    ids.forEach(id => St.update(id, { reportId: rid === "__none" ? undefined : rid }));
+    St.saveMany(ids.map(id => { const n = { ...St.get(id) }; if (rid === "__none") delete n.reportId; else n.reportId = rid; return n; }));
     toast(rid === "__none" ? "Removed from report" : `Added ${plural(ids.length, "expense")} to ${St.get(rid).name}`);
   } else if (b === "export") exportCsv(ids.map(St.get), "selected");
   else if (b === "delete") {
     if (!await confirmBox({ title: `Delete ${plural(ids.length, "expense")}?`, text: "You can undo this right after.", ok: "Delete", danger: true })) return;
-    const copies = ids.map(St.remove); SP.sel.clear(); SP.selecting = false;
-    toast(`Deleted ${plural(copies.length, "expense")}`, () => copies.forEach(St.restore));
+    const copies = ids.map(id => JSON.parse(JSON.stringify(St.get(id)))); St.saveMany(copies.map(c => ({ ...c, deleted: true }))); SP.sel.clear(); SP.selecting = false;
+    toast(`Deleted ${plural(copies.length, "expense")}`, () => St.saveMany(copies.map(c => ({ ...c, deleted: false }))));
   }
   spend();
 }
@@ -256,21 +285,33 @@ export function spendClick(ev) {
   if (act === "selall") { const all = SP.lastRes || []; SP.sel = SP.sel.size === all.length ? new Set() : new Set(all.map(e => e.id)); spend(); return true; }
   if (act === "more") { SP.limit += 300; spend(); return true; }
   if (act === "export") { exportCsv(SP.lastRes || St.expenses(), "spend"); return true; }
+  if (pressed) { pressed = false; if (ev.target.closest(".erow[data-id]")) return true; }
   if (SP.mode === "list" && SP.selecting) {
     const row = ev.target.closest(".erow[data-id]");
     if (row) { const id = row.dataset.id; SP.sel.has(id) ? SP.sel.delete(id) : SP.sel.add(id); row.classList.toggle("sel"); renderBulk(); return true; }
   }
-  if (pressed) { pressed = false; return true; }
   if (SP.mode === "cal") return calClick(ev);
   if (SP.mode === "insights") return insClick(ev);
   return false;
 }
+let qT = null;
 export function spendInput(ev) {
-  if (ev.target.id === "q") { SP.f.q = ev.target.value; SP.limit = 150; const pos = ev.target.selectionStart; spend(); const q = $("q"); q.focus(); try { q.setSelectionRange(pos, pos); } catch {} }
+  if (ev.target.id !== "q" || ev.isComposing) return;
+  SP.f.q = ev.target.value; SP.limit = 150;
+  clearTimeout(qT); qT = setTimeout(refreshList, 120);
+}
+document.addEventListener("compositionend", (ev) => { if (ev.target.id === "q") { SP.f.q = ev.target.value; refreshList(); } });
+/** Re-render results without touching the search box (keeps keyboard + predictive text intact) */
+function refreshList() {
+  if (!location.hash.startsWith("#/spend") || SP.mode !== "list") return;
+  const tmp = document.createElement("div"); tmp.innerHTML = listHtml();
+  for (const sel of [".filters", ".res-h", "#list"]) { const a = document.querySelector("#view " + sel), b = tmp.querySelector(sel); if (a && b) a.replaceWith(b); }
+  hydrateThumbs($("view"));
 }
 // long-press to start selecting (mobile)
 document.addEventListener("pointerdown", (ev) => {
   if (!location.hash.startsWith("#/spend") || SP.mode !== "list" || SP.selecting) return;
+  pressed = false;
   const row = ev.target.closest("#list .erow[data-id]"); if (!row) return;
   clearTimeout(pressT);
   pressT = setTimeout(() => { pressed = true; SP.selecting = true; SP.sel = new Set([row.dataset.id]); spend(); navigator.vibrate?.(15); }, 550);
@@ -459,12 +500,13 @@ let rzT; addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(
 export function exportCsv(list, name = "expenses") {
   list = list.filter(Boolean);
   if (!list.length) return toast("Nothing to export");
-  const rows = [["date", "merchant", "restaurant", "amount_inr", "your_share", "original_amount", "currency", "category", "paid_with", "description", "tags", "report", "reimbursable", "type", "distance_km", "split_with", "items", "tax_and_charges"],
+  const rows = [["date", "merchant", "restaurant", "amount_inr", "your_share", "original_amount", "currency", "category", "paid_with", "description", "tags", "report", "office_or_reimbursable", "type", "distance_km", "split_with", "items", "tax_and_charges"],
     ...[...list].sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, e.what, e.place || "", e.amount, St.spendOf(e), e.orig?.amt ?? "", e.orig?.cur || "INR", cat(e.cat).name, e.pay || "", e.note || "",
-      (e.tags || []).join(" "), St.reportOf(e)?.name || "", e.reimb ? "yes" : "", e.type || "manual", e.distance?.km ?? "",
+      (e.tags || []).join(", "), St.reportOf(e)?.name || "", St.isOffice(e) ? "yes" : "", e.type || "manual", e.distance?.km ?? "",
       e.split ? e.split.shares.filter(s => !s.me).map(s => `${s.name}: ${s.amt}`).join("; ") + (e.split.paidBy !== "me" ? ` (paid by ${e.split.paidBy})` : "") : "",
       (e.receipt?.items || []).map(i => `${i.n}${i.q ? " x" + i.q : ""}: ${i.p}`).join("; "), (e.receipt?.extras || []).map(i => `${i.n}: ${i.p}`).join("; ")])];
-  const csv = "﻿" + rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const cell = (v) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
+  const csv = "\ufeff" + rows.map(r => r.map(cell).join(",")).join("\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   a.download = `${name.replace(/[^\w-]+/g, "-").toLowerCase()}-${today()}.csv`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
@@ -530,6 +572,7 @@ export async function detail(id) {
       <form class="composer" id="cmt"><input id="cmtIn" placeholder="Add a note…" autocomplete="off" aria-label="Add a note"><button class="btn primary" type="submit">Add</button></form></div>`;
   if (e.img) {
     const u = await imgUrl(e.id) || await St.getImage(e.id).then(b => b && imgUrl(e.id));
+    if (!location.hash.includes(id)) return; // user moved on while the photo loaded
     const im = $("rImg"), msg = $("rImgMsg");
     if (im && u) { im.src = u; im.hidden = false; msg?.remove(); im.onclick = () => viewImage(u); }
     else if (msg) msg.textContent = Api.user ? "Photo is on another device and hasn't been backed up yet." : "Photo not found on this device.";
@@ -584,7 +627,7 @@ async function detailAction(ev, id, e) {
       const m = x.target.closest("[data-m]")?.dataset.m; if (!m) return; s.close();
       import("./ui.js").then(({ whenSettled }) => whenSettled(() => {
         if (m === "edit") openForm({ id });
-        else if (m === "dup") { const n = JSON.parse(JSON.stringify(e)); Object.assign(n, { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), date: today(), created: Date.now(), comments: [], status: undefined, img: undefined, notDup: undefined }); Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); go(`#/expense/${n.id}`); toast("Duplicated"); }
+        else if (m === "dup") { const n = JSON.parse(JSON.stringify(e)); Object.assign(n, { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), date: today(), created: Date.now(), comments: [], status: undefined, img: undefined, imgV: undefined, notDup: [e.id] }); Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); go(`#/expense/${n.id}`); toast("Duplicated"); }
         else if (m === "report") editField(id, "report");
         else if (m === "del") { const copy = St.remove(id); go("#/spend"); toast("Expense deleted", () => St.restore(copy)); }
       }));
@@ -599,5 +642,6 @@ export function detailSubmit(ev, id) {
   if (ev.target.id !== "cmt") return;
   ev.preventDefault();
   const v = $("cmtIn").value.trim(); if (!v) return;
+  $("cmtIn").value = ""; $("cmtIn").blur();
   const e = St.get(id); St.update(id, { comments: [...(e.comments || []), { t: Date.now(), text: v }] }, { log: false });
 }

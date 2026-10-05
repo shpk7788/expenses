@@ -1,5 +1,5 @@
 // Reports, Splits, Account, Sign-in.
-import { $, esc, norm, r2, money, moneyBig, today, dMed, dShort, dLong, plural, timeAgo, I, LS } from "./util.js";
+import { $, esc, norm, r2, money, moneyBig, today, ymd, dMed, dShort, dLong, plural, timeAgo, I, LS, LOGO } from "./util.js";
 import { CATS, cat, CURRENCIES, CUR_NAMES } from "./cats.js";
 import * as St from "./store.js";
 import { Api } from "./api.js";
@@ -19,7 +19,7 @@ export function reports() {
   $("view").innerHTML = top("Reports", { right: `<button class="btn primary sm" type="button" data-r="new">${I.plus}New</button>` }) + `
     <div class="seg" role="tablist" style="margin-bottom:12px">${[["all", "All"], ["open", "Open"], ["submitted", "Submitted"], ["reimbursed", "Reimbursed"]].map(([k, l]) => `<button type="button" role="tab" data-rf="${k}" aria-selected="${repFilter === k}">${l}</button>`).join("")}</div>
     ${shown.length ? `<div class="card" style="padding:0">${shown.map(r => {
-      const ex = St.inReport(r.id), tot = ex.reduce((s, e) => s + e.amount, 0), claim = St.claimOf(r);
+      const ex = St.inReport(r.id), tot = ex.reduce((s, e) => s + St.spendOf(e), 0), claim = St.claimOf(r);
       const dates = ex.map(e => e.date).sort();
       return `<button type="button" class="rcard" data-go="#/report/${r.id}"><span class="ri-ico">${I.folder}</span>
         <span style="min-width:0"><b>${esc(r.name)}</b><small>${pill(r.status)}<span>${plural(ex.length, "expense")}${dates.length ? ` · ${dShort(dates[0])}${dates.length > 1 && dates.at(-1) !== dates[0] ? ` – ${dShort(dates.at(-1))}` : ""}` : ""}</span></small></span>
@@ -36,14 +36,14 @@ export function reportsClick(ev) {
 export function report(id) {
   const r = St.get(id);
   if (!r || r.deleted) { $("view").innerHTML = top("Report", { back: "#/reports" }) + `<div class="card empty"><b>Report not found</b><br><button class="btn secondary" data-go="#/reports" type="button">All reports</button></div>`; return; }
-  const ex = St.inReport(id).sort((a, b) => b.date.localeCompare(a.date)), tot = ex.reduce((s, e) => s + e.amount, 0), claim = St.claimOf(r);
+  const ex = St.inReport(id).sort((a, b) => b.date.localeCompare(a.date)), tot = ex.reduce((s, e) => s + St.spendOf(e), 0), claim = St.claimOf(r);
   const dates = ex.map(e => e.date).sort(), next = { open: ["submitted", "Mark as submitted"], submitted: ["reimbursed", "Mark as reimbursed"], reimbursed: ["open", "Reopen"] }[r.status];
-  const byCat = {}; ex.forEach(e => byCat[e.cat] = (byCat[e.cat] || 0) + e.amount);
+  const byCat = {}; ex.forEach(e => byCat[e.cat] = (byCat[e.cat] || 0) + St.spendOf(e));
   $("view").innerHTML = top(r.name, { back: "#/reports", right: `<button class="icon-btn" type="button" data-rp="menu" aria-label="Report actions">${I.more}</button>` }) + `
     <section class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       <div><div class="muted small">Total</div><div class="num" style="font-size:1.9rem;font-weight:750;line-height:1.15">${moneyBig(tot)}</div>
       <div class="muted small" style="margin-top:2px">${plural(ex.length, "expense")}${dates.length ? ` · ${dMed(dates[0])}${dates.at(-1) !== dates[0] ? ` – ${dMed(dates.at(-1))}` : ""}` : ""}</div></div>${pill(r.status)}</div>
-      <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span>To claim</span><b>${money(claim)}</b></div><div class="kpi"><span>${r.status === "reimbursed" ? "Reimbursed on" : r.status === "submitted" ? "Submitted on" : "Created"}</span><b>${dMed(new Date(r.statusAt || r.created).toISOString().slice(0, 10))}</b></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span>To claim</span><b>${money(claim)}</b></div><div class="kpi"><span>${r.status === "reimbursed" ? "Reimbursed on" : r.status === "submitted" ? "Submitted on" : "Created"}</span><b>${dMed(ymd(new Date(r.statusAt || r.created)))}</b></div></div>
       ${r.note ? `<p class="muted small" style="margin:12px 0 0">${esc(r.note)}</p>` : ""}
       <label class="inline-row" style="margin-top:14px"><span>Office / reimbursable<small>${r.business !== false ? "Not counted in your personal spending" : "Counted in your personal spending"}</small></span><span class="switch"><input type="checkbox" id="repBiz" ${r.business !== false ? "checked" : ""}><i></i></span></label>
       <button type="button" class="btn primary block sm" style="margin-top:14px" data-rp="status">${next[1]}</button>
@@ -70,13 +70,13 @@ export async function reportClick(ev, id) {
       whenSettled(async () => {
         if (m === "rename") { const v = await promptBox({ title: "Rename report", value: r.name }); if (v && v.trim()) St.save({ ...St.get(id), name: v.trim() }); }
         if (m === "note") { const v = await promptBox({ title: "Description", value: r.note || "", placeholder: "e.g. Claim from finance by month end" }); if (v !== null) { const n = { ...St.get(id), note: v.trim() }; if (!n.note) delete n.note; St.save(n); } }
-        if (m === "del") { if (!await confirmBox({ title: `Delete “${r.name}”?`, text: "The expenses stay in Spend.", ok: "Delete", danger: true })) return; const copy = St.remove(id); const ids = St.expenses().filter(e => e.reportId === id).map(e => e.id); go("#/reports"); toast("Report deleted", () => St.restore(copy)); }
+        if (m === "del") { if (!await confirmBox({ title: `Delete “${r.name}”?`, text: "The expenses stay in Spend.", ok: "Delete", danger: true })) return; const copy = St.remove(id); go("#/reports"); toast("Report deleted", () => St.restore(copy)); }
       });
     });
   }
   return true;
 }
-function pickExpenses(rid) {
+export function pickExpenses(rid) {
   const r = St.get(rid), list = St.expenses().sort((a, b) => (b.reportId === rid) - (a.reportId === rid) || (!!a.reportId - !!b.reportId) || b.date.localeCompare(a.date));
   const sel = new Set(list.filter(e => e.reportId === rid).map(e => e.id));
   const s = sheet({ title: `Expenses in “${r.name}”`, sub: "Tick the ones that belong on this report", body: list.length ? `<div class="searchbar" style="margin:0">${I.search}<input type="search" id="pkQ" placeholder="Search your expenses"></div><div class="selecting"><ul class="rows" id="pkL" style="padding:0">${list.map(e => rowHtml(e, { selected: sel, showDate: true }).replace("<small>", e.reportId && e.reportId !== rid && St.get(e.reportId) ? `<small><span class="pill">On ${esc(St.get(e.reportId).name)}</span>` : "<small>")).join("")}</ul></div>` : `<p class="muted">You haven't added any expenses yet. Close this and use Scan or New expense.</p>`,
@@ -85,25 +85,25 @@ function pickExpenses(rid) {
   s.el.querySelector("#pkQ")?.addEventListener("input", (ev) => { const q = ev.target.value.toLowerCase(); s.body.querySelectorAll("#pkL .erow").forEach(li => li.hidden = q && !li.textContent.toLowerCase().includes(q)); });
   s.body.addEventListener("click", (e) => { const row = e.target.closest(".erow[data-id]"); if (!row) return; const id = row.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); row.classList.toggle("sel"); s.el.querySelector("#pkOk").textContent = `Save · ${sel.size} selected`; });
   s.el.querySelector("#pkOk").onclick = () => {
-    let n = 0;
-    list.forEach(e => { const want = sel.has(e.id); if (want !== (e.reportId === rid)) { St.update(e.id, { reportId: want ? rid : undefined }); n++; } });
-    s.close(); if (n) toast("Report updated");
+    const changed = list.filter(e => sel.has(e.id) !== (e.reportId === rid)).map(e => { const n = { ...e }; if (sel.has(e.id)) n.reportId = rid; else delete n.reportId; return n; });
+    if (changed.length) St.saveMany(changed);
+    s.close(); if (changed.length) toast("Report updated");
   };
 }
 async function printReport(id) {
-  const r = St.get(id), ex = St.inReport(id).sort((a, b) => a.date.localeCompare(b.date)), tot = ex.reduce((s, e) => s + e.amount, 0), claim = ex.filter(e => e.reimb).reduce((s, e) => s + e.amount, 0);
+  const r = St.get(id), ex = St.inReport(id).sort((a, b) => a.date.localeCompare(b.date)), tot = ex.reduce((s, e) => s + St.spendOf(e), 0), claim = St.claimOf(r), claims = (e) => r.business !== false || e.reimb;
   const w = window.open("", "_blank");
   if (!w) return toast("Allow pop-ups to export the PDF");
   const imgs = {}; for (const e of ex) if (e.img) { const b = await St.getImage(e.id); if (b) imgs[e.id] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); }); }
   const who = Api.user?.username || St.prefs().name || "";
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(r.name)} — expense report</title><meta name="viewport" content="width=device-width,initial-scale=1">
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(r.name)} — Palli expense report</title><meta name="viewport" content="width=device-width,initial-scale=1">
   <style>body{font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111;margin:28px}h1{font-size:22px;margin:0 0 4px}.m{color:#555;margin:0 0 18px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #ddd;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#555}td.r,th.r{text-align:right;white-space:nowrap}tfoot td{font-weight:700;border-bottom:0}.sm{color:#666;font-size:11px}.rc{page-break-inside:avoid;margin:18px 0}.rc img{max-width:100%;max-height:520px;border:1px solid #ddd}@media print{.np{display:none}body{margin:12mm}}</style></head><body>
   <button class="np" onclick="print()" style="float:right;padding:8px 14px;font:inherit">Print / Save as PDF</button>
   <h1>${esc(r.name)}</h1><p class="m">${who ? `${esc(who)} · ` : ""}${STATUS[r.status]} · ${ex.length} expenses · generated ${dMed(today())}${r.note ? `<br>${esc(r.note)}` : ""}</p>
   <table><thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Description</th><th class="r">Amount</th><th class="r">Reimb.</th></tr></thead><tbody>
-  ${ex.map(e => `<tr><td>${dMed(e.date)}</td><td>${esc(e.what)}${e.place ? `<div class="sm">${esc(e.place)}</div>` : ""}${e.orig ? `<div class="sm">${esc(e.orig.cur)} ${e.orig.amt} @ ${(+e.orig.rate).toFixed(2)}</div>` : ""}</td><td>${esc(cat(e.cat).name)}</td><td>${esc(e.note || "")}${e.receipt?.items?.length ? `<div class="sm">${e.receipt.items.map(i => esc(i.n)).join(", ")}</div>` : ""}</td><td class="r">${money(e.amount)}</td><td class="r">${e.reimb ? "Yes" : ""}</td></tr>`).join("")}
-  </tbody><tfoot><tr><td colspan="4">Total</td><td class="r">${money(tot)}</td><td></td></tr><tr><td colspan="4">Reimbursable</td><td class="r">${money(claim)}</td><td></td></tr></tfoot></table>
-  ${Object.keys(imgs).length ? `<h2 style="font-size:16px;margin-top:28px">Receipts</h2>${ex.filter(e => imgs[e.id]).map(e => `<div class="rc"><div class="sm">${dMed(e.date)} · ${esc(e.what)} · ${money(e.amount)}</div><img src="${imgs[e.id]}"></div>`).join("")}` : ""}
+  ${ex.map(e => `<tr><td>${dMed(e.date)}</td><td>${esc(e.what)}${e.place ? `<div class="sm">${esc(e.place)}</div>` : ""}${e.orig ? `<div class="sm">${esc(e.orig.cur)} ${e.orig.amt} @ ${(+e.orig.rate).toFixed(2)}</div>` : ""}</td><td>${esc(cat(e.cat).name)}</td><td>${esc(e.note || "")}${e.receipt?.items?.length ? `<div class="sm">${e.receipt.items.map(i => esc(i.n)).join(", ")}</div>` : ""}</td><td class="r">${money(St.spendOf(e))}${e.split ? `<div class="sm">your share of ${money(e.split.total)}</div>` : ""}</td><td class="r">${claims(e) ? "Yes" : ""}</td></tr>`).join("")}
+  </tbody><tfoot><tr><td colspan="4">Total</td><td class="r">${money(tot)}</td><td></td></tr><tr><td colspan="4">To claim</td><td class="r">${money(claim)}</td><td></td></tr></tfoot></table>
+  ${Object.keys(imgs).length ? `<h2 style="font-size:16px;margin-top:28px">Receipts</h2>${ex.filter(e => imgs[e.id]).map(e => `<div class="rc"><div class="sm">${dMed(e.date)} · ${esc(e.what)} · ${money(St.spendOf(e))}</div><img src="${imgs[e.id]}"></div>`).join("")}` : ""}
   <script>setTimeout(()=>print(),400)<\/script></body></html>`);
   w.document.close();
 }
@@ -148,7 +148,7 @@ export function account() {
     ${S.noBucket ? `<div class="note-box warn" style="margin-bottom:12px"><b>Receipt photos aren't backing up yet.</b> Your expenses sync fine, but photos stay on this device until receipt storage is set up in Supabase (run the storage part of <code>supabase/schema.sql</code>).</div>` : ""}
     <div class="sec-h">Preferences</div>
     <div class="card" style="padding:2px 14px"><div class="set-list">
-      ${row("budget", I.wallet, "Monthly budget", P.budget ? "₹" + P.budget.toLocaleString("en-IN") : "Not set")}
+      ${row("budget", I.wallet, "Budgets", P.budget ? "₹" + P.budget.toLocaleString("en-IN") : Object.keys(P.catBudgets).length ? plural(Object.keys(P.catBudgets).length, "category") : "Not set", Object.keys(P.catBudgets).length && P.budget ? plural(Object.keys(P.catBudgets).length, "category budget") : "Monthly total and per category")}
       ${row("currency", I.globe, "Default currency", esc(P.currency), "Converted to ₹ automatically")}
       ${row("upi", I.upi, "Your UPI ID", esc(P.upi || "Not set"), "For split payment requests")}
       ${row("name", I.user2, "Your name", esc(P.name || (u?.username ?? "Not set")), "On UPI requests and PDFs")}
@@ -163,12 +163,12 @@ export function account() {
       ${row("import", I.upload, "Import from CSV", "", "Adds rows, skips duplicates")}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Expenses · v6.2</p>`;
+    <p class="ver">Palli · v7.0</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
   const P = St.prefs();
-  if (k === "sync") { await St.syncNow(); toast(St.S.state === "ok" ? "Synced" : St.S.err || "Couldn't sync"); }
+  if (k === "sync") { await St.syncNow(); for (let i = 0; i < 100 && St.S.state === "busy"; i++) await new Promise(r => setTimeout(r, 150)); toast(St.S.state === "ok" ? "Synced" : St.S.err || "Couldn't sync — will retry"); }
   else if (k === "signin") { LS.del("exp:guestMode"); window.dispatchEvent(new Event("app:auth")); }
   else if (k === "budget") editBudget();
   else if (k === "currency") { const v = await pickList({ title: "Default currency", value: P.currency, search: true, options: CURRENCIES.map(c => ({ value: c, label: c, sub: CUR_NAMES[c] })) }); if (v) St.setPrefs({ currency: v }); }
@@ -188,11 +188,14 @@ export async function accountClick(ev) {
   else if (k === "export") exportCsv(St.expenses(), "expenses");
   else if (k === "import") importCsv();
   else if (k === "logout") {
-    if (St.S.dirty.size) await St.syncNow();
-    if (St.S.dirty.size && !await confirmBox({ title: "Some changes haven't synced", text: `${plural(St.S.dirty.size, "change")} will be lost on this device. Sign out anyway?`, ok: "Sign out", danger: true })) return true;
-    if (!St.S.dirty.size && !await confirmBox({ title: "Sign out?", text: "Your expenses stay safe in your account.", ok: "Sign out" })) return true;
+    if (St.S.dirty.size || St.S.imgUp.size || St.metaDirty()) await St.syncNow();
+    const unsent = St.S.dirty.size, photos = St.S.imgUp.size;
+    if (unsent || photos) {
+      const what = [unsent && plural(unsent, "change"), photos && plural(photos, "receipt photo")].filter(Boolean).join(" and ");
+      if (!await confirmBox({ title: "Not everything is backed up", text: `${what} haven't reached your account yet${photos && St.S.noBucket ? " (photo backup isn't set up)" : ""}. ${unsent ? "Unsent changes will be lost. " : ""}Photos stay on this device. Sign out anyway?`, ok: "Sign out", danger: true })) return true;
+    } else if (!await confirmBox({ title: "Sign out?", text: "Your expenses stay safe in your account.", ok: "Sign out" })) return true;
     const { Img } = await import("./media.js");
-    for (const e of St.S.items) if (e.img) await Img.del(e.id);
+    for (const e of St.S.items) if (e.img && !St.S.imgUp.has(e.id)) await Img.del(e.id); // keep photos that never uploaded
     St.wipeSpace(St.ns()); await Api.signOut(); LS.del("exp:guestMode");
     St.switchSpace(); window.dispatchEvent(new Event("app:auth")); toast("Signed out");
   }
@@ -204,26 +207,42 @@ function importCsv() {
     const file = inp.files[0]; if (!file) return;
     const rows = parseCSV((await file.text()).replace(/^﻿/, "")), head = (rows[0] || []).map(h => h.trim().toLowerCase());
     const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
-    const ci = { date: col("date"), what: col("merchant", "what"), amount: col("amount_inr", "amount"), place: col("restaurant"), cat: col("category"), pay: col("paid_with"), note: col("description", "note"), tags: col("tags"), reimb: col("reimbursable"), items: col("items", "receipt_items"), tax: col("tax_and_charges") };
+    const ci = { date: col("date"), what: col("merchant", "what"), amount: col("amount_inr", "amount"), share: col("your_share"), place: col("restaurant"), cat: col("category"), pay: col("paid_with"), note: col("description", "note"), tags: col("tags"),
+      reimb: col("office_or_reimbursable", "reimbursable"), report: col("report"), orig: col("original_amount"), cur: col("currency"), splitw: col("split_with"), items: col("items", "receipt_items"), tax: col("tax_and_charges") };
+    const repByName = new Map(St.reports().map(r => [norm(r.name), r])), newRecs = [];
     if (ci.date < 0 || ci.what < 0 || ci.amount < 0) return toast("CSV needs date, merchant (or what) and amount columns");
     const catBy = Object.fromEntries(CATS.map(c => [c.name.toLowerCase(), c.id]));
     const list = (s) => (s || "").split(";").map(x => x.trim()).filter(Boolean).map(x => { const m = /^(.*?)(?:\s+x(\d+))?:\s*(-?[\d.]+)$/.exec(x); if (!m) return null; const o = { n: m[1], p: parseFloat(m[3]) }; if (m[2]) o.q = +m[2]; return o; }).filter(Boolean);
-    const seen = new Set(St.expenses().map(e => `${e.date}|${norm(e.what)}|${e.amount}`)); let n = 0;
+    // skip rows already in the app, but keep genuine repeats inside the file (e.g. two ₹777 bills on one day)
+    const have = new Map(); St.expenses().forEach(e => { const k = `${e.date}|${norm(e.what)}|${r2(St.spendOf(e))}`; have.set(k, (have.get(k) || 0) + 1); });
+    const inFile = new Map(); let n = 0;
     for (const r of rows.slice(1)) {
       let date = (r[ci.date] || "").trim(); const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/.exec(date); if (m) date = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-      const what = (r[ci.what] || "").trim(), amt = parseFloat(String(r[ci.amount] || "").replace(/[₹,\s]/g, ""));
+      const what = (r[ci.what] || "").trim(), num = (v) => parseFloat(String(v || "").replace(/[₹,\s']/g, ""));
+      const isSplit = ci.splitw >= 0 && (r[ci.splitw] || "").trim(), share = ci.share >= 0 ? num(r[ci.share]) : NaN;
+      const amt = isSplit && share > 0 ? share : num(r[ci.amount]);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !what || !(amt > 0)) continue;
-      const k = `${date}|${norm(what)}|${r2(amt)}`; if (seen.has(k)) continue; seen.add(k);
+      const k = `${date}|${norm(what)}|${r2(amt)}`; inFile.set(k, (inFile.get(k) || 0) + 1); if (inFile.get(k) <= (have.get(k) || 0)) continue;
       const e = St.newExpense({ date, what, amount: r2(amt), cat: (ci.cat >= 0 && catBy[(r[ci.cat] || "").toLowerCase()]) || (await import("./cats.js")).catFor(what, St.prefs().rules) });
       if (ci.place >= 0 && r[ci.place]) e.place = r[ci.place];
       if (ci.pay >= 0 && r[ci.pay]) e.pay = r[ci.pay];
       if (ci.note >= 0 && r[ci.note]) e.note = r[ci.note];
-      if (ci.tags >= 0 && r[ci.tags]) e.tags = r[ci.tags].split(/[\s,]+/).filter(Boolean);
-      if (ci.reimb >= 0 && /^y/i.test(r[ci.reimb] || "")) e.reimb = true;
+      if (ci.tags >= 0 && r[ci.tags]) e.tags = r[ci.tags].split(r[ci.tags].includes(",") ? /\s*,\s*/ : /\s+/).filter(Boolean);
+      const office = ci.reimb >= 0 && /^y/i.test(r[ci.reimb] || ""), repName = ci.report >= 0 ? (r[ci.report] || "").trim() : "";
+      if (repName) {
+        let rep = repByName.get(norm(repName));
+        if (!rep) { rep = { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), kind: "report", name: repName, status: "open", business: office, created: Date.now() }; repByName.set(norm(repName), rep); newRecs.push(rep); }
+        e.reportId = rep.id;
+        if (office && rep.business === false) e.reimb = true;
+      } else if (office) e.reimb = true;
+      const cur = ci.cur >= 0 ? (r[ci.cur] || "").trim().toUpperCase() : "", oa = ci.orig >= 0 ? num(r[ci.orig]) : NaN;
+      if (cur && cur !== "INR" && oa > 0 && !isSplit) e.orig = { amt: oa, cur, rate: r2(e.amount / oa * 10000) / 10000 };
+      if (isSplit) e.note = [e.note, `Split with ${r[ci.splitw].trim()}`].filter(Boolean).join(" · ");
       const li = ci.items >= 0 ? list(r[ci.items]) : [], tx = ci.tax >= 0 ? list(r[ci.tax]) : [];
       if (li.length || tx.length) e.receipt = { items: li, extras: tx };
-      St.save(e); n++;
+      newRecs.push(e); n++;
     }
+    if (newRecs.length) St.saveMany(newRecs);
     toast(`Imported ${plural(n, "expense")}`);
   };
   inp.click();
@@ -247,7 +266,7 @@ export function authScreen() {
   const el = $("auth");
   const signup = authMode === "signup";
   el.innerHTML = `<div class="auth-card">
-    <div class="brand"><span class="logo">₹</span><div><h1>Expenses</h1><p>Scan receipts. Track spending. Split bills.</p></div></div>
+    <div class="brand"><span class="logo">${LOGO}</span><div><h1>Palli</h1><p>Your money, beautifully organised.</p></div></div>
     <div class="card" style="margin:0;padding:20px">
       <h2 style="font-size:1.2rem;margin-bottom:14px">${signup ? "Create your account" : "Sign in"}</h2>
       <form id="authForm" novalidate>
@@ -276,7 +295,7 @@ async function doAuth(ev) {
     const guest = St.guestCount();
     authMode === "signup" ? await Api.signUp(user, pass) : await Api.signIn(user, pass);
     St.switchSpace();
-    try { await Api.loadMeta(); } catch {}
+    try { await St.loadPrefs(); } catch {}
     St.applyTheme();
     LS.del("exp:guestMode");
     window.dispatchEvent(new CustomEvent("app:auth", { detail: { guest } }));
