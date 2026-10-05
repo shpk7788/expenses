@@ -8,21 +8,24 @@ import { compress, fxRate } from "./media.js";
 
 // ---------- + menu ----------
 export function openCreate(ctx = {}) {
-  const s = sheet({ title: "Create", body: `<div class="menu">
+  const rep = ctx.reportId && St.get(ctx.reportId);
+  const s = sheet({ title: rep ? `Add to “${rep.name}”` : "Create", body: `<div class="menu">
     <button type="button" data-a="scan"><span class="mi">${I.scan}</span><span><b>Scan receipts</b><small>Snap one or more — details fill in automatically</small></span></button>
     <button type="button" data-a="manual"><span class="mi">${I.pen}</span><span><b>Manual expense</b><small>Type in the amount and merchant</small></span></button>
     <button type="button" data-a="distance"><span class="mi">${I.car}</span><span><b>Distance</b><small>Kilometres × your rate per km</small></span></button>
     <button type="button" data-a="split"><span class="mi">${I.split}</span><span><b>Split with friends</b><small>Track who owes whom</small></span></button>
-    <button type="button" data-a="report"><span class="mi">${I.folder}</span><span><b>New report</b><small>Group expenses, e.g. a trip or reimbursements</small></span></button>
+    ${rep ? `<button type="button" data-a="existing"><span class="mi">${I.folder}</span><span><b>Pick expenses you've already added</b><small>Move them into this report</small></span></button>`
+      : `<button type="button" data-a="report"><span class="mi">${I.folder}</span><span><b>New report</b><small>Group expenses, e.g. office or a trip</small></span></button>`}
   </div>` });
   s.el.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
     s.close();
     whenSettled(() => {
       if (a === "scan") startScan(ctx);
-      else if (a === "manual") openForm({ date: ctx.date });
-      else if (a === "distance") openForm({ type: "distance", date: ctx.date });
-      else if (a === "split") openSplit({ date: ctx.date });
+      else if (a === "manual") openForm({ date: ctx.date, reportId: ctx.reportId });
+      else if (a === "distance") openForm({ type: "distance", date: ctx.date, reportId: ctx.reportId });
+      else if (a === "split") openSplit({ date: ctx.date, reportId: ctx.reportId });
+      else if (a === "existing") ctx.pickExisting?.();
       else if (a === "report") newReport().then(r => r && go(`#/report/${r.id}`));
     });
   });
@@ -68,11 +71,12 @@ const placeSource = (q) => { const h = historySource("place")(q); return [{ titl
 const friends = () => { const set = new Map(); St.expenses().forEach(e => e.split?.shares.forEach(s => { if (!s.me) set.set(norm(s.name), s.name); })); St.settles().forEach(s => set.set(norm(s.with), s.with)); return [...set.values()]; };
 
 // ---------- expense form (create + edit) ----------
-export function openForm({ id, type = "manual", date, focus } = {}) {
+export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   const ex = id ? St.get(id) : null;
   if (ex?.split) return openSplit({ id });
   const P = St.prefs();
-  const e = ex ? JSON.parse(JSON.stringify(ex)) : St.newExpense({ type, date: date || today(), pay: localStorage.getItem("exp:lastPay") || undefined });
+  const e = ex ? JSON.parse(JSON.stringify(ex)) : St.newExpense({ type, date: date || today(), reportId, pay: localStorage.getItem("exp:lastPay") || undefined });
+  if (!e.reportId) delete e.reportId;
   if (!e.pay) delete e.pay;
   const isDist = e.type === "distance";
   let cur = e.orig?.cur || (ex ? "INR" : P.currency || "INR"), rate = e.orig?.rate || null, catTouched = !!ex, catId = e.cat || "other";
@@ -337,7 +341,7 @@ export function openItems(id) {
 }
 
 // ---------- splits ----------
-export function openSplit({ id, date } = {}) {
+export function openSplit({ id, date, reportId } = {}) {
   const ex = id ? St.get(id) : null;
   const sp = ex?.split || { total: "", paidBy: "me", method: "equal", shares: [{ me: true, name: "You", amt: 0 }, { name: "", amt: 0 }] };
   const known = friends();
@@ -399,7 +403,7 @@ export function openSplit({ id, date } = {}) {
     const split = { total: r2(T), paidBy: $$("#sPaid").value, method, shares: people.map(p => p.me ? { me: true, name: "You", amt: r2(p.amt) } : { name: p.name.trim(), amt: r2(p.amt) }) };
     const patch = { what: w, date: $$("#sDate").value || today(), split, amount: r2(T) };
     if (ex) { St.update(ex.id, patch); toast("Split saved"); }
-    else { St.save(St.newExpense({ ...patch, type: "split", cat: catFor(w, St.prefs().rules) })); toast("Split saved"); }
+    else { const n = St.newExpense({ ...patch, type: "split", cat: catFor(w, St.prefs().rules), reportId }); if (!reportId) delete n.reportId; St.save(n); toast("Split saved"); }
     s.close();
   };
   $$("#sDel")?.addEventListener("click", async () => {

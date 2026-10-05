@@ -4,7 +4,7 @@ import { CATS, cat, CURRENCIES, CUR_NAMES } from "./cats.js";
 import * as St from "./store.js";
 import { Api } from "./api.js";
 import { sheet, toast, go, confirmBox, promptBox, pickList, groupedHtml, hydrateThumbs, rowHtml } from "./ui.js";
-import { newReport, openSplit, openSettle } from "./create.js";
+import { newReport, openSplit, openSettle, openCreate } from "./create.js";
 import { top, exportCsv, editBudget } from "./views.js";
 import { imgUrl } from "./media.js";
 
@@ -49,14 +49,14 @@ export function report(id) {
       <button type="button" class="btn primary block sm" style="margin-top:14px" data-rp="status">${next[1]}</button>
       <div class="rep-actions"><button type="button" class="btn secondary sm" data-rp="add">${I.plus}Add</button><button type="button" class="btn secondary sm" data-rp="pdf">${I.download}PDF</button><button type="button" class="btn secondary sm" data-rp="csv">${I.download}CSV</button></div></section>
     ${ex.length && Object.keys(byCat).length > 1 ? `<div class="card"><h3>By category</h3><ul class="plain">${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<li><span>${cat(c).emoji} ${esc(cat(c).name)}</span><b>${money(v)}</b></li>`).join("")}</ul></div>` : ""}
-    ${ex.length ? groupedHtml(ex) : `<div class="card empty"><b>No expenses on this report</b>Add expenses you've already logged, or create new ones and pick this report.<br><button class="btn primary" type="button" data-rp="add">${I.plus}Add expenses</button></div>`}`;
+    ${ex.length ? groupedHtml(ex, { full: true }) : `<div class="card empty"><b>No expenses yet</b>Scan a receipt, type one in, or move in expenses you've already added.<br><button class="btn primary" type="button" data-rp="add">${I.plus}Add expense</button></div>`}`;
   hydrateThumbs($("view"));
 }
 export async function reportClick(ev, id) {
   const a = ev.target.closest("[data-rp]")?.dataset.rp; if (!a) return false;
   const r = St.get(id); if (!r) return true;
   if (a === "status") { const next = { open: "submitted", submitted: "reimbursed", reimbursed: "open" }[r.status]; St.save({ ...r, status: next, statusAt: Date.now() }); toast(`Marked as ${STATUS[next].toLowerCase()}`); }
-  else if (a === "add") pickExpenses(id);
+  else if (a === "add") openCreate({ reportId: id, pickExisting: () => pickExpenses(id) });
   else if (a === "csv") exportCsv(St.inReport(id), r.name);
   else if (a === "pdf") printReport(id);
   else if (a === "menu") {
@@ -77,11 +77,12 @@ export async function reportClick(ev, id) {
   return true;
 }
 function pickExpenses(rid) {
-  const r = St.get(rid), list = St.expenses().filter(e => !e.reportId || e.reportId === rid || St.get(e.reportId)?.deleted).sort((a, b) => b.date.localeCompare(a.date));
+  const r = St.get(rid), list = St.expenses().sort((a, b) => (b.reportId === rid) - (a.reportId === rid) || (!!a.reportId - !!b.reportId) || b.date.localeCompare(a.date));
   const sel = new Set(list.filter(e => e.reportId === rid).map(e => e.id));
-  const s = sheet({ title: `Expenses in “${r.name}”`, sub: "Tick the ones that belong on this report", body: list.length ? `<div class="selecting"><ul class="rows" id="pkL" style="padding:0">${list.map(e => rowHtml(e, { selected: sel, showDate: true })).join("")}</ul></div>` : `<p class="muted">Every expense is already on another report.</p>`,
+  const s = sheet({ title: `Expenses in “${r.name}”`, sub: "Tick the ones that belong on this report", body: list.length ? `<div class="searchbar" style="margin:0">${I.search}<input type="search" id="pkQ" placeholder="Search your expenses"></div><div class="selecting"><ul class="rows" id="pkL" style="padding:0">${list.map(e => rowHtml(e, { selected: sel, showDate: true }).replace("<small>", e.reportId && e.reportId !== rid && St.get(e.reportId) ? `<small><span class="pill">On ${esc(St.get(e.reportId).name)}</span>` : "<small>")).join("")}</ul></div>` : `<p class="muted">You haven't added any expenses yet. Close this and use Scan or New expense.</p>`,
     foot: `<button type="button" class="btn primary" id="pkOk">Save · ${sel.size} selected</button>` });
   hydrateThumbs(s.body);
+  s.el.querySelector("#pkQ")?.addEventListener("input", (ev) => { const q = ev.target.value.toLowerCase(); s.body.querySelectorAll("#pkL .erow").forEach(li => li.hidden = q && !li.textContent.toLowerCase().includes(q)); });
   s.body.addEventListener("click", (e) => { const row = e.target.closest(".erow[data-id]"); if (!row) return; const id = row.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); row.classList.toggle("sel"); s.el.querySelector("#pkOk").textContent = `Save · ${sel.size} selected`; });
   s.el.querySelector("#pkOk").onclick = () => {
     let n = 0;
@@ -162,7 +163,7 @@ export function account() {
       ${row("import", I.upload, "Import from CSV", "", "Adds rows, skips duplicates")}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Expenses · v6.1</p>`;
+    <p class="ver">Expenses · v6.2</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
