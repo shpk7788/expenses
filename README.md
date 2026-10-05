@@ -10,6 +10,11 @@ A personal expense tracker modelled on Expensify, built for India.
 **Splits** — balances per friend, settle up, UPI payment requests.
 **Account** — username/password sync across devices, budget, default currency, UPI ID, distance rates, theme, learned categories, CSV import/export.
 
+## Importing bank statements and SMS
+- **Account → Import statement or SMS** (or **+ → Import**): bank statements (PDF, Excel, CSV; locked PDFs ask for the password), Google Pay / PhonePe / Paytm statement PDFs, pasted bank SMS, or a Palli CSV backup. Everything is parsed on the device (`js/importer.js`), sorted into categories, checked for duplicates, and shown for review before anything is saved.
+- **Shared into Palli**: on Android (installed app) share a bank SMS or statement file to Palli; or open `https://app.snyp.io/?sms=<text>`.
+- **Automatic bank alerts**: run the "automatic bank alerts" part of `supabase/schema.sql`, then Account → Automatic bank alerts. An iPhone Shortcuts automation or an Android SMS forwarder posts each alert to `rpc/ingest_sms` with a private token; Palli shows "N new bank alerts" for one-tap review.
+
 ## Stack
 Plain HTML/CSS/ES modules (no build). Supabase for auth, data (`expenses` table, row-level security) and receipt photos (private `receipts` bucket). Receipt OCR runs on-device with Tesseract.js. Merchant list from OpenStreetMap's name-suggestion-index + curated Indian brands (`tools/build_stores.py`).
 

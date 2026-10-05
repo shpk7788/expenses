@@ -34,3 +34,26 @@ create policy "receipts: update own" on storage.objects for update to authentica
   using (bucket_id = 'receipts' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "receipts: delete own" on storage.objects for delete to authenticated
   using (bucket_id = 'receipts' and (storage.foldername(name))[1] = auth.uid()::text);
+
+
+-- Palli: automatic bank alerts (run once in Supabase → SQL editor)
+create table if not exists public.sms_inbox (id bigserial primary key, user_id uuid not null references auth.users on delete cascade, msg text not null, received timestamptz not null default now());
+create table if not exists public.sms_tokens (user_id uuid primary key references auth.users on delete cascade, token text not null unique, created timestamptz not null default now());
+alter table public.sms_inbox enable row level security;
+alter table public.sms_tokens enable row level security;
+drop policy if exists "own inbox" on public.sms_inbox;
+create policy "own inbox" on public.sms_inbox for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "own token" on public.sms_tokens;
+create policy "own token" on public.sms_tokens for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create or replace function public.ingest_sms(token text, msg text) returns text language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  select t.user_id into uid from public.sms_tokens t where t.token = ingest_sms.token;
+  if uid is null then raise exception 'unknown token'; end if;
+  if coalesce(length(trim(msg)), 0) = 0 then return 'empty'; end if;
+  insert into public.sms_inbox (user_id, msg) values (uid, left(msg, 1000));
+  delete from public.sms_inbox where user_id = uid and id not in (select id from public.sms_inbox where user_id = uid order by id desc limit 300);
+  return 'ok';
+end $$;
+revoke all on function public.ingest_sms(text, text) from public;
+grant execute on function public.ingest_sms(text, text) to anon, authenticated;

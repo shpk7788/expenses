@@ -50,6 +50,7 @@ export function home() {
     if (b.pct > 100) todo.push({ ic: I.alert, cls: "bad", t: `${cat(b.id).name} is ${money(b.spent - b.lim)} over budget`, s: `${money(b.spent)} of ${money(b.lim)} this month`, go: "#/spend?v=insights" });
     else if (b.pct >= 85) todo.push({ ic: I.alert, t: `${cat(b.id).name}: ${Math.round(b.pct)}% of budget used`, s: `${money(b.lim - b.spent)} left for ${plural(daysLeft, "day")}`, go: "#/spend?v=insights" });
   }
+  if (St.S.inbox.length) todo.unshift({ ic: I.bell, cls: "acc", t: `${plural(St.S.inbox.length, "new bank alert")}`, s: "Tap to review and add them", go: "#/import?inbox=1" });
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
   const recent = [...all].sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 5);
   const topCats = Object.entries(catSpent).filter(([id, v]) => v > 0 && !(P.catBudgets || {})[id]).sort((a, b) => b[1] - a[1]).slice(0, budgetRows.length ? 3 : 4);

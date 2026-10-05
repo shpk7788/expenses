@@ -12,7 +12,7 @@ export const emit = () => { clearTimeout(emitT); emitT = setTimeout(() => listen
 export const ns = () => (Api.user ? `u:${Api.user.id}` : "guest");
 const K = (name, space = ns()) => `exp:${space}:${name}`;
 
-export const S = { items: [], dirty: new Set(), imgUp: new Set(), imgDel: new Set(), cursor: null, lastSynced: 0, state: "off", err: "", noBucket: false };
+export const S = { inbox: [], items: [], dirty: new Set(), imgUp: new Set(), imgDel: new Set(), cursor: null, lastSynced: 0, state: "off", err: "", noBucket: false };
 
 (function migrate() {
   const old = LS.get("expenses.v1", null);
@@ -273,6 +273,7 @@ export async function syncNow() {
     const cutoff = Date.now() - 60 * 864e5;
     S.items = S.items.filter(e => { const purge = e.deleted && !S.dirty.has(e.id) && e.updated < cutoff; if (purge && e.img) Img.del(e.id); return !purge; });
     if (metaDirty()) await flushMeta();
+    checkInbox();
     S.lastSynced = Date.now(); persist();
     if (changed) emit();
     setState("ok");
@@ -287,7 +288,16 @@ window.addEventListener("online", () => scheduleSync(200));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSync(200); });
 setInterval(() => { if (!document.hidden) syncNow(); }, 60000);
 
-export function switchSpace() { load(); setState(Api.user ? "idle" : "off"); applyTheme(); emit(); }
+/** Bank alerts waiting to be reviewed (sent automatically from the phone) */
+export async function checkInbox() {
+  if (!Api.user) { S.inbox = []; return; }
+  try { const rows = await Api.inbox(); const n = (rows || []).length; if (n !== S.inbox.length || (n && rows[n - 1].id !== S.inbox[n - 1].id)) { S.inbox = rows || []; emit(); } } catch {}
+}
+export async function clearInbox(ids) {
+  const set = new Set(ids); S.inbox = S.inbox.filter(r => !set.has(r.id)); emit();
+  try { await Api.clearInbox(ids); } catch {}
+}
+export function switchSpace() { S.inbox = []; load(); setState(Api.user ? "idle" : "off"); applyTheme(); emit(); }
 /** Move guest (device-only) records into the signed-in account */
 export function adoptGuest() {
   const guest = LS.get(K("items", "guest"), []).filter(e => !e.deleted), have = new Set(S.items.map(e => e.id));

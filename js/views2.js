@@ -160,10 +160,11 @@ export function account() {
     <div class="card" style="padding:2px 14px"><div class="set-list">
       ${row("splits", I.split, "Splits & balances", "")}
       ${row("export", I.download, "Export to CSV", "", plural(St.expenses().length, "expense"))}
-      ${row("import", I.upload, "Import from CSV", "", "Adds rows, skips duplicates")}
+      ${row("import", I.upload, "Import statement or SMS", "", "Bank, Google Pay, PhonePe, CSV")}
+      ${u ? row("alerts", I.bell, "Automatic bank alerts", "", "Forward payment SMS to Palli") : ""}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Palli · v7.0</p>`;
+    <p class="ver">Palli · v8.0</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
@@ -186,7 +187,8 @@ export async function accountClick(ev) {
   }
   else if (k === "splits") go("#/splits");
   else if (k === "export") exportCsv(St.expenses(), "expenses");
-  else if (k === "import") importCsv();
+  else if (k === "import") go("#/import");
+  else if (k === "alerts") (await import("./importview.js")).alertsSetup();
   else if (k === "logout") {
     if (St.S.dirty.size || St.S.imgUp.size || St.metaDirty()) await St.syncNow();
     const unsent = St.S.dirty.size, photos = St.S.imgUp.size;
@@ -201,16 +203,15 @@ export async function accountClick(ev) {
   }
   return true;
 }
-function importCsv() {
-  const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".csv,text/csv";
-  inp.onchange = async () => {
-    const file = inp.files[0]; if (!file) return;
-    const rows = parseCSV((await file.text()).replace(/^﻿/, "")), head = (rows[0] || []).map(h => h.trim().toLowerCase());
+/** Palli's own CSV format (round-trips with Export). Returns the number added, or -1 if the file isn't in that format. */
+export async function importPalliCsv(text) {
+  {
+    const rows = parseCSV(text.replace(/^﻿/, "")), head = (rows[0] || []).map(h => h.trim().toLowerCase());
     const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
     const ci = { date: col("date"), what: col("merchant", "what"), amount: col("amount_inr", "amount"), share: col("your_share"), place: col("restaurant"), cat: col("category"), pay: col("paid_with"), note: col("description", "note"), tags: col("tags"),
       reimb: col("office_or_reimbursable", "reimbursable"), report: col("report"), orig: col("original_amount"), cur: col("currency"), splitw: col("split_with"), items: col("items", "receipt_items"), tax: col("tax_and_charges") };
     const repByName = new Map(St.reports().map(r => [norm(r.name), r])), newRecs = [];
-    if (ci.date < 0 || ci.what < 0 || ci.amount < 0) return toast("CSV needs date, merchant (or what) and amount columns");
+    if (ci.date < 0 || ci.what < 0 || ci.amount < 0) return -1;
     const catBy = Object.fromEntries(CATS.map(c => [c.name.toLowerCase(), c.id]));
     const list = (s) => (s || "").split(";").map(x => x.trim()).filter(Boolean).map(x => { const m = /^(.*?)(?:\s+x(\d+))?:\s*(-?[\d.]+)$/.exec(x); if (!m) return null; const o = { n: m[1], p: parseFloat(m[3]) }; if (m[2]) o.q = +m[2]; return o; }).filter(Boolean);
     // skip rows already in the app, but keep genuine repeats inside the file (e.g. two ₹777 bills on one day)
@@ -243,10 +244,10 @@ function importCsv() {
       newRecs.push(e); n++;
     }
     if (newRecs.length) St.saveMany(newRecs);
-    toast(`Imported ${plural(n, "expense")}`);
-  };
-  inp.click();
+    return n;
+  }
 }
+export { parseCSV };
 function parseCSV(text) {
   const rows = []; let row = [], cur = "", q = false;
   for (let i = 0; i < text.length; i++) {

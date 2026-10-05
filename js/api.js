@@ -112,6 +112,23 @@ export const Api = {
     return session.user.meta;
   },
   setMetaLocal(meta) { if (session) { session.user.meta = meta; persist(); } },
+  // bank alerts forwarded by an iPhone Shortcut / Android forwarder (table sms_inbox, see supabase/schema.sql)
+  ingestUrl: `${BASE}/rest/v1/rpc/ingest_sms?apikey=${KEY}`,
+  async inbox() {
+    const res = await call("/rest/v1/sms_inbox?select=id,msg,received&order=id.asc&limit=500", { method: "GET" });
+    if (!res.ok) return null;   // not set up yet
+    return res.json();
+  },
+  async clearInbox(ids) {
+    for (let i = 0; i < ids.length; i += 100) await call(`/rest/v1/sms_inbox?id=in.(${ids.slice(i, i + 100).map(Number).join(",")})`, { method: "DELETE" });
+  },
+  async smsToken(renew = false) {
+    if (!renew) { const res = await call("/rest/v1/sms_tokens?select=token", { method: "GET" }); if (!res.ok) return { missing: true }; const r = await res.json(); if (r[0]) return { token: r[0].token }; }
+    const b = crypto.getRandomValues(new Uint8Array(18)), t = [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+    const res = await call("/rest/v1/sms_tokens?on_conflict=user_id", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: session.user.id, token: t }) });
+    if (!res.ok) return { missing: true };
+    return { token: t };
+  },
   // receipt photos: private bucket "receipts", path <user id>/<expense id>.jpg
   async uploadImage(id, blob) {
     const res = await call(`/storage/v1/object/receipts/${session.user.id}/${id}.jpg`, { method: "POST", headers: { "Content-Type": "image/jpeg", "x-upsert": "true", "cache-control": "31536000" }, body: blob });

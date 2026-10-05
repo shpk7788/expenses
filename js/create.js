@@ -14,6 +14,7 @@ export function openCreate(ctx = {}) {
     <button type="button" data-a="manual"><span class="mi">${I.pen}</span><span><b>Manual expense</b><small>Type in the amount and merchant</small></span></button>
     <button type="button" data-a="distance"><span class="mi">${I.car}</span><span><b>Distance</b><small>Kilometres × your rate per km</small></span></button>
     <button type="button" data-a="split"><span class="mi">${I.split}</span><span><b>Split with friends</b><small>Track who owes whom</small></span></button>
+    ${rep ? "" : `<button type="button" data-a="import"><span class="mi">${I.upload}</span><span><b>Import statement or SMS</b><small>Bank, Google Pay or PhonePe — sorted for you</small></span></button>`}
     ${rep ? `<button type="button" data-a="existing"><span class="mi">${I.folder}</span><span><b>Pick expenses you've already added</b><small>Move them into this report</small></span></button>`
       : `<button type="button" data-a="report"><span class="mi">${I.folder}</span><span><b>New report</b><small>Group expenses, e.g. office or a trip</small></span></button>`}
   </div>` });
@@ -27,6 +28,7 @@ export function openCreate(ctx = {}) {
       else if (a === "distance") openForm({ type: "distance", date: ctx.date, reportId: ctx.reportId });
       else if (a === "split") openSplit({ date: ctx.date, reportId: ctx.reportId });
       else if (a === "existing") ctx.pickExisting?.();
+      else if (a === "import") go("#/import");
       else if (a === "report") newReport().then(r => r && go(`#/report/${r.id}`));
     });
   });

@@ -6,13 +6,14 @@ import { toast, sheet, go, anySheet, whenSettled } from "./ui.js";
 import { openCreate, resumeScans } from "./create.js";
 import * as V from "./views.js";
 import * as V2 from "./views2.js";
+import * as IV from "./importview.js";
 
 const TABS = [["home", "Home", I.home], ["spend", "Spend", I.spend], ["create"], ["reports", "Reports", I.reports], ["account", "Account", I.account]];
 function drawNav() {
-  const r = route().name, badge = St.expenses().filter(e => e.status === "review" || e.status === "failed").length + St.duplicates().size;
+  const r = route().name, badge = St.expenses().filter(e => e.status === "review" || e.status === "failed").length + St.duplicates().size + St.S.inbox.length;
   $("nav").innerHTML = `<div class="nav-in"><div class="brand"><span class="logo">${LOGO}</span><h1>Palli</h1></div>${TABS.map(([k, l, ic]) => k === "create"
     ? `<button type="button" class="nav-create" id="navCreate" aria-label="Create">${I.plus}<span class="lbl">Create</span></button>`
-    : `<a class="nav-tab" href="#/${k}" ${r === k || (k === "spend" && r === "expense") || (k === "reports" && r === "report") || (k === "home" && r === "splits") ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${k === "home" && badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")}</div>`;
+    : `<a class="nav-tab" href="#/${k}" ${r === k || (k === "spend" && r === "expense") || (k === "reports" && r === "report") || (k === "home" && r === "splits") || (k === "account" && r === "import") ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${k === "home" && badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")}</div>`;
 }
 function route() {
   const h = location.hash.replace(/^#\/?/, ""), [path, qs = ""] = h.split("?"), [name = "home", id] = path.split("/");
@@ -22,6 +23,7 @@ let current = null, navs = 0;
 function render() {
   const r = route();
   if (current && current !== r.name && current === "spend") V.leaveSpend();
+  if (current === "import" && r.name !== "import") IV.leaveImport();
   if (r.name === "spend" && (current !== "spend" || render._nav)) V.spendParams(r.params);
   render._nav = false;
   const changed = current !== r.name || r.id !== render._id;
@@ -36,10 +38,11 @@ function render() {
     case "report": V2.report(r.id); break;
     case "splits": V2.splits(); break;
     case "account": V2.account(); break;
+    case "import": IV.importView(r.params); break;
     default: V.home();
   }
   drawNav();
-  document.title = { home: "Palli", spend: "Spend · Palli", expense: "Expense · Palli", reports: "Reports · Palli", report: "Report · Palli", splits: "Splits · Palli", account: "Account · Palli" }[r.name] || "Palli";
+  document.title = { home: "Palli", spend: "Spend · Palli", expense: "Expense · Palli", reports: "Reports · Palli", report: "Report · Palli", splits: "Splits · Palli", account: "Account · Palli", import: "Import · Palli" }[r.name] || "Palli";
   if (changed) { scrollTo(0, 0); const v = $("view"); v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); clearTimeout(render._t); render._t = setTimeout(() => v.classList.remove("enter"), 700); } else scrollTo(0, y);
   // totals count up when they change
   document.querySelectorAll("#view [data-count]").forEach(el => { const to = +el.dataset.count, key = r.name + el.className, from = render._counts?.[key] ?? (changed ? 0 : to); (render._counts ||= {})[key] = to; countUp(el, to, moneyHero, from); });
@@ -62,12 +65,14 @@ $("view").addEventListener("click", async (ev) => {
   if (r.name === "report" && await V2.reportClick(ev, r.id)) return;
   if (r.name === "splits" && await V2.splitsClick(ev)) return;
   if (r.name === "account" && await V2.accountClick(ev)) return;
+  if (r.name === "import" && await IV.importClick(ev)) return;
   const row = ev.target.closest(".erow[data-id]");
   if (row) go(`#/expense/${row.dataset.id}`);
 });
-$("view").addEventListener("input", (ev) => { if (route().name === "spend") V.spendInput(ev); });
+$("view").addEventListener("input", (ev) => { const n = route().name; if (n === "spend") V.spendInput(ev); if (n === "import") IV.importInput(ev); });
+$("view").addEventListener("keydown", (ev) => { if (route().name === "import") IV.importKey(ev); });
 $("view").addEventListener("change", (ev) => { const r = route(); if (r.name === "expense") V.detailChange(ev, r.id); if (r.name === "spend") V.insChange(ev); if (r.name === "report") V2.reportChange(ev, r.id); });
-$("view").addEventListener("submit", (ev) => { const r = route(); if (r.name === "expense") V.detailSubmit(ev, r.id); });
+$("view").addEventListener("submit", (ev) => { const r = route(); if (r.name === "expense") V.detailSubmit(ev, r.id); if (r.name === "import") IV.importSubmit(ev); });
 $("nav").addEventListener("click", (ev) => {
   if (ev.target.closest("#navCreate")) { const r = route(); openCreate(r.name === "report" ? { reportId: r.id, pickExisting: () => V2.pickExpenses(r.id) } : {}); return; }
 });
@@ -95,9 +100,15 @@ addEventListener("app:auth", (e) => gate(e.detail));
 addEventListener("api:loggedout", () => { St.switchSpace(); gate(); toast("Please sign in again"); });
 
 // ---- boot ----
+// a bank SMS shared into Palli (Android share sheet, or an iPhone Shortcut opening ?sms=…)
+{
+  const q = new URLSearchParams(location.search), txt = q.get("sms") || [q.get("title"), q.get("text")].filter(Boolean).join("\n");
+  if (txt.trim()) { sessionStorage.setItem("exp:sharedSms", txt); history.replaceState(null, "", location.pathname + "#/import"); }
+  else if (q.has("shared")) history.replaceState(null, "", location.pathname + "#/import?file=1");
+}
 St.load(); St.applyTheme();
 gate();
 resumeScans();
-if (Api.user) { St.syncNow(); St.loadPrefs().catch(() => {}); }
+if (Api.user) { St.syncNow(); St.loadPrefs().catch(() => {}); St.checkInbox(); }
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.__app = { St, Api };
