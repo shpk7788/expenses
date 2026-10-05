@@ -2,7 +2,7 @@
 import { $, esc, norm, r2, uuid, money, moneyIn, today, I, plural } from "./util.js";
 import { CATS, cat, catFor, PAYS, CURRENCIES, CUR_NAMES, AUTO_FX, isDelivery, rankStores, FOOD_PLACE } from "./cats.js";
 import * as St from "./store.js";
-import { sheet, toast, autocomplete, pickList, go, confirmBox, promptBox, whenSettled } from "./ui.js";
+import { sheet, toast, autocomplete, pickList, pickCategory, go, confirmBox, promptBox, whenSettled } from "./ui.js";
 import { Api } from "./api.js";
 import { compress, fxRate } from "./media.js";
 
@@ -28,11 +28,29 @@ export function openCreate(ctx = {}) {
   });
 }
 
-export async function newReport(name) {
-  const n = name ?? await promptBox({ title: "New report", label: "Report name", placeholder: "e.g. Goa trip, Office reimbursements", ok: "Create" });
-  if (!n || !n.trim()) return null;
-  const r = St.save({ id: uuid(), kind: "report", name: n.trim(), status: "open", created: Date.now() });
-  toast(`Report “${r.name}” created`); return r;
+export function newReport() {
+  return new Promise(res => {
+    let out = null;
+    const s = sheet({ title: "New report", center: true, body: `
+      <label class="field"><span>Report name</span><input id="nrName" placeholder="e.g. Office expenses, Goa trip" autocapitalize="sentences"></label>
+      <label class="inline-row"><span>Office / reimbursable<small>Expenses on this report won't count in your personal spending</small></span><span class="switch"><input type="checkbox" id="nrBiz" checked><i></i></span></label>`,
+      foot: `<button class="btn secondary" data-x>Cancel</button><button class="btn primary" id="nrOk">Create</button>`, onClose: () => res(out) });
+    const name = s.el.querySelector("#nrName"); setTimeout(() => name.focus(), 50);
+    const go_ = () => {
+      const n = name.value.trim(); if (!n) { name.focus(); return; }
+      out = St.save({ id: uuid(), kind: "report", name: n, status: "open", business: s.el.querySelector("#nrBiz").checked, created: Date.now() });
+      toast(`Report “${n}” created`); s.close();
+    };
+    s.el.querySelector("#nrOk").onclick = go_;
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go_(); } });
+  });
+}
+/** Most-used categories (for one-tap chips) */
+function topCats(n = 5) {
+  const c = {}; St.expenses().forEach(e => c[e.cat] = (c[e.cat] || 0) + 1);
+  const ids = Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k]) => k).filter(k => k !== "other");
+  for (const d of ["food", "groceries", "transport", "shopping", "bills", "fuel"]) if (ids.length < n && !ids.includes(d)) ids.push(d);
+  return ids.slice(0, n);
 }
 
 // ---------- merchant suggestions ----------
@@ -59,7 +77,7 @@ export function openForm({ id, type = "manual", date, focus } = {}) {
   const isDist = e.type === "distance";
   let cur = e.orig?.cur || (ex ? "INR" : P.currency || "INR"), rate = e.orig?.rate || null, catTouched = !!ex, catId = e.cat || "other";
   const dist = e.distance || { from: "", to: "", km: "", vehicle: "car", rate: P.rates.car };
-  const reportsOpen = St.reports().filter(r => r.status === "open" || r.id === e.reportId);
+  const reportsOpen = St.reports().filter(r => r.status !== "reimbursed" || r.id === e.reportId);
   const title = ex ? (isDist ? "Edit distance" : "Edit expense") : isDist ? "Distance" : "Manual expense";
   const amtVal = e.orig ? e.orig.amt : (e.amount || "");
 
@@ -77,19 +95,25 @@ export function openForm({ id, type = "manual", date, focus } = {}) {
       <div class="conv" id="fConv" hidden></div></div>
     <div class="field"><label for="fWhat">${isDist ? "Description" : "Merchant"}</label><div><input id="fWhat" value="${esc(e.what)}" placeholder="${isDist ? "e.g. Client visit" : "Store, app or what it was for"}" autocapitalize="words" enterkeyhint="next"></div></div>
     <div class="field" id="fPlaceF" hidden><label for="fPlace">Which restaurant?</label><div><input id="fPlace" value="${esc(e.place || "")}" placeholder="e.g. Meghana Foods" autocapitalize="words"></div></div>
-    <div class="row2 stack-sm"><label class="field"><span>Date</span><input id="fDate" type="date" value="${esc(e.date)}"></label>
-      <div class="field"><span>Category</span><button type="button" class="btn secondary" id="fCat" style="justify-content:flex-start;padding:0 12px;font-weight:500"></button></div></div>
+    <div><label class="field"><span>Date</span><input id="fDate" type="date" value="${esc(e.date)}"></label>
+    </div>
+    <div class="field"><span>Category</span><div class="cat-quick" id="fCat"></div></div>
     <div class="field"><span>Paid with</span><div class="chips wrap" id="fPay">${PAYS.map(p => `<button type="button" class="chip" data-pay="${esc(p)}" aria-pressed="${e.pay === p}">${esc(p)}</button>`).join("")}</div></div>
     <label class="field"><span>Description <span class="muted">(optional)</span></span><input id="fNote" value="${esc(e.note || "")}" placeholder="e.g. dinner with Arjun" autocapitalize="sentences"></label>
     <label class="field"><span>Tags <span class="muted">(optional, comma separated)</span></span><input id="fTags" value="${esc((e.tags || []).join(", "))}" placeholder="e.g. work, goa-trip" autocapitalize="none"></label>
     <label class="field"><span>Report</span><select id="fRep"><option value="">None</option>${reportsOpen.map(r => `<option value="${r.id}" ${r.id === e.reportId ? "selected" : ""}>${esc(r.name)}</option>`).join("")}<option value="__new">+ New report…</option></select></label>
-    <label class="inline-row"><span>Reimbursable<small>Someone will pay you back for this</small></span><span class="switch"><input type="checkbox" id="fReimb" ${e.reimb ? "checked" : ""}><i></i></span></label>
+    <label class="inline-row"><span>Reimbursable<small>Someone pays you back — not counted in your spending</small></span><span class="switch"><input type="checkbox" id="fReimb" ${e.reimb ? "checked" : ""}><i></i></span></label>
     <p class="err" id="fErr"></p>`,
     foot: `${ex ? `<button type="button" class="btn danger icon" id="fDel" aria-label="Delete">${I.trash}</button>` : ""}<button type="button" class="btn primary" id="fSave">${ex ? "Save" : "Add expense"}</button>` });
   const $$ = (sel) => s.el.querySelector(sel);
   const amt = $$("#fAmt"), what = $$("#fWhat"), place = $$("#fPlace");
 
-  const drawCat = () => { const c = cat(catId); $$("#fCat").innerHTML = `<span style="font-size:1.1rem">${c.emoji}</span><span style="overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</span>`; };
+  const quick = topCats();
+  const drawCat = () => {
+    const ids = quick.includes(catId) ? quick : [catId, ...quick.slice(0, 4)];
+    $$("#fCat").innerHTML = ids.map(id => { const c = cat(id); return `<button type="button" class="chip" data-cat="${id}" aria-pressed="${id === catId}">${c.emoji} ${esc(c.name)}</button>`; }).join("")
+      + `<button type="button" class="chip" data-cat="__all">More…</button>`;
+  };
   const syncPlace = () => { $$("#fPlaceF").hidden = !isDelivery(what.value); };
   const autoCat = () => { if (!catTouched) { catId = what.value.trim() ? catFor(what.value, St.prefs().rules) : (isDist ? "transport" : "other"); drawCat(); } };
   if (!ex && isDist) catId = "transport";
@@ -98,8 +122,9 @@ export function openForm({ id, type = "manual", date, focus } = {}) {
   autocomplete(what, whatSource, (picked) => { syncPlace(); autoCat(); (isDelivery(what.value) ? place : $$("#fDate")).focus(); });
   autocomplete(place, placeSource, () => $$("#fDate").focus());
   what.addEventListener("input", () => { syncPlace(); autoCat(); });
-  $$("#fCat").onclick = async () => {
-    const v = await pickList({ title: "Category", value: catId, options: CATS.map(c => ({ value: c.id, label: c.name, icon: c.emoji })) });
+  $$("#fCat").onclick = async (ev) => {
+    const b = ev.target.closest("[data-cat]"); if (!b) return;
+    const v = b.dataset.cat === "__all" ? await pickCategory({ value: catId }) : b.dataset.cat;
     if (v) { catId = v; catTouched = true; drawCat(); }
   };
   $$("#fPay").onclick = (ev) => { const b = ev.target.closest("[data-pay]"); if (!b) return; const on = b.getAttribute("aria-pressed") !== "true"; s.el.querySelectorAll("[data-pay]").forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", on); };

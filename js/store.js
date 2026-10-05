@@ -52,6 +52,13 @@ export const settles = () => liveKind("settle");
 /** What this expense costs *me* (my share of a split, 0 while still scanning) */
 export const spendOf = (e) => e.split ? r2(e.split.shares.find(s => s.me)?.amt || 0) : (e.amount || 0);
 export const reportOf = (e) => e.reportId ? get(e.reportId) : null;
+/** Office/reimbursable: on a work report, or marked reimbursable — kept out of personal spending */
+export const isOffice = (e) => !!e.reimb || (() => { const r = e.reportId && get(e.reportId); return !!r && !r.deleted && r.business !== false; })();
+/** What counts toward *my* spending (0 for office/reimbursable) */
+export const mine = (e) => isOffice(e) ? 0 : spendOf(e);
+/** Reports you can still add to (not yet reimbursed) */
+export const activeReports = () => reports().filter(r => r.status !== "reimbursed");
+export const claimOf = (r) => inReport(r.id).filter(e => r.business !== false || e.reimb).reduce((s, e) => s + (e.amount || 0), 0);
 export const inReport = (rid) => expenses().filter(e => e.reportId === rid);
 
 // ---------- writes ----------

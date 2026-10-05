@@ -1,7 +1,7 @@
 // UI primitives: sheets (back-button aware), toast, confirm, autocomplete, expense rows.
 import { $, esc, norm, money, I, MONTHS, dayLabel, plural } from "./util.js";
 import { cat } from "./cats.js";
-import { spendOf } from "./store.js";
+import { spendOf, mine, isOffice } from "./store.js";
 import { imgUrl } from "./media.js";
 
 // ---------- toast ----------
@@ -62,7 +62,7 @@ export function closeAll(hash) {
   stack.length = 0; ignorePop++; pendingHash = hash ?? null;
   history.go(-n);
 }
-export const anySheet = () => stack.length > 0;
+export const anySheet = () => stack.length > 0 || ignorePop > 0;
 export function go(hash) { closeAll(hash); }
 
 export function confirmBox({ title, text = "", ok = "OK", danger = false }) {
@@ -164,8 +164,9 @@ export function rowHtml(e, { dupes, selected, showDate = false } = {}) {
   if (scanning) flags.push(`<span class="pill">Scanning…</span>`);
   else if (e.status === "review") flags.push(`<span class="pill warn">Review</span>`);
   else if (e.status === "failed") flags.push(`<span class="pill bad">Add details</span>`);
+  if (isOffice(e) && !scanning) flags.push(`<span class="pill open">Office</span>`);
   if (dupes?.has(e.id)) flags.push(`<span class="pill warn">${I.copy}Duplicate?</span>`);
-  const end = scanning ? `<span class="amt scanning-txt">…</span>` : `<span class="amt">${money(spendOf(e))}</span>`;
+  const end = scanning ? `<span class="amt scanning-txt">…</span>` : `<span class="amt${isOffice(e) ? " office" : ""}">${money(spendOf(e))}</span>`;
   const sub2 = e.orig ? `<small>${esc(e.orig.cur)} ${+e.orig.amt}</small>` : e.split ? `<small>of ${money(e.split.total)}</small>` : "";
   const icons = [e.img && I.image, (e.receipt?.items?.length) && I.receipt, e.reportId && I.folder].filter(Boolean).slice(0, 2).join("");
   return `<li class="erow${scanning ? " scanning" : ""}${selected?.has(e.id) ? " sel" : ""}" data-id="${e.id}">
@@ -185,11 +186,11 @@ export function hydrateThumbs(root) {
 /** Group expenses: months → days */
 export function groupedHtml(list, opts = {}) {
   let html = "", curM = "", curD = "", rows = [];
-  const monthTot = {}; list.forEach(e => { const k = e.date.slice(0, 7); monthTot[k] = (monthTot[k] || 0) + spendOf(e); });
+  const monthTot = {}; list.forEach(e => { const k = e.date.slice(0, 7); monthTot[k] = (monthTot[k] || 0) + mine(e); });
   const flush = () => {
     if (!rows.length) return;
-    const t = rows.reduce((s, e) => s + spendOf(e), 0);
-    html += `<div class="group"><div class="ghead"><span>${dayLabel(curD)}</span><span>${money(t)}</span></div><ul class="rows">${rows.map(e => rowHtml(e, opts)).join("")}</ul></div>`;
+    const t = rows.reduce((s, e) => s + mine(e), 0), off = rows.reduce((s, e) => s + (isOffice(e) ? spendOf(e) : 0), 0);
+    html += `<div class="group"><div class="ghead"><span>${dayLabel(curD)}</span><span>${money(t)}${off ? ` <span class="office-note">+ ${money(off)} office</span>` : ""}</span></div><ul class="rows">${rows.map(e => rowHtml(e, opts)).join("")}</ul></div>`;
     rows = [];
   };
   for (const e of list) {
@@ -202,3 +203,12 @@ export function groupedHtml(list, opts = {}) {
   return html;
 }
 export const countLabel = (n) => plural(n, "expense");
+
+/** Category picker: every category visible at once as a grid (no long scrolling) */
+export function pickCategory({ value, title = "Category" } = {}) {
+  return import("./cats.js").then(({ CATS }) => new Promise(res => {
+    let val = null;
+    const s = sheet({ title, body: `<div class="cat-grid">${CATS.map(c => `<button type="button" data-v="${c.id}" aria-pressed="${c.id === value}"><span class="ce" style="background:${c.color}22">${c.emoji}</span><span>${esc(c.name)}</span></button>`).join("")}</div>`, onClose: () => res(val) });
+    s.body.addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (!b) return; val = b.dataset.v; s.close(); });
+  }));
+}

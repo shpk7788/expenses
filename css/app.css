@@ -175,6 +175,16 @@ ul.rows { list-style: none; margin: 0; padding: 2px 4px 4px; }
 .erow .end small { display: block; font-size: .72rem; color: var(--muted); white-space: nowrap; }
 .erow .flags { display: flex; gap: 4px; justify-content: flex-end; margin-top: 2px; }
 .scanning-txt { color: var(--accent); }
+.erow .amt.office { color: var(--muted); font-weight: 500; }
+.office-note { color: var(--accent); font-weight: 500; }
+.cat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cat-grid button { display: grid; justify-items: center; gap: 6px; padding: 10px 2px; border-radius: 12px; font-size: .74rem; line-height: 1.2; text-align: center; color: var(--text); border: 1px solid transparent; }
+.cat-grid button:hover { background: var(--accent-soft); }
+.cat-grid button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.cat-grid .ce { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 1.35rem; }
+.cat-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.office-line { width: 100%; text-align: left; border-radius: 0; align-items: center; display: flex; justify-content: space-between; gap: 8px; font-size: .85rem; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--line); }
+.office-line b { color: var(--accent); }
 @keyframes pulse { 50% { opacity: .45; } }
 .erow.scanning .cat-ico, .erow.scanning .mid b { animation: pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .erow.scanning .cat-ico, .erow.scanning .mid b { animation: none; } }

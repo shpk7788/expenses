@@ -4,7 +4,7 @@ import { $, esc, norm, r2, money, moneyBig, moneyIn, compact, today, addDays, ad
 import { CATS, cat, PAYS } from "./cats.js";
 import * as St from "./store.js";
 import { Api } from "./api.js";
-import { sheet, toast, go, confirmBox, pickList, rowHtml, groupedHtml, hydrateThumbs, viewImage } from "./ui.js";
+import { sheet, toast, go, confirmBox, pickList, pickCategory, rowHtml, groupedHtml, hydrateThumbs, viewImage } from "./ui.js";
 import { openCreate, openForm, openSplit, startScan, openItems, newReport } from "./create.js";
 import { imgUrl } from "./media.js";
 
@@ -18,8 +18,9 @@ export const top = (title, { back, right = "" } = {}) => `<header class="top">${
 // =============== HOME ===============
 export function home() {
   const all = St.expenses(), t = today(), m = t.slice(0, 7), P = St.prefs();
-  const month = all.filter(e => e.date.startsWith(m)).reduce((s, e) => s + St.spendOf(e), 0);
-  const todayTot = all.filter(e => e.date === t).reduce((s, e) => s + St.spendOf(e), 0);
+  const month = all.filter(e => e.date.startsWith(m)).reduce((s, e) => s + St.mine(e), 0);
+  const todayTot = all.filter(e => e.date === t).reduce((s, e) => s + St.mine(e), 0);
+  const officeMonth = all.filter(e => e.date.startsWith(m) && St.isOffice(e)).reduce((s, e) => s + St.spendOf(e), 0);
   let budget = "";
   if (P.budget > 0) {
     const left = P.budget - month, pct = Math.min(100, month / P.budget * 100), d = new Date(), dl = daysIn(d.getFullYear(), d.getMonth()) - d.getDate() + 1;
@@ -38,19 +39,20 @@ export function home() {
   const owed = bals.filter(b => b.v > 0).reduce((s, b) => s + b.v, 0), owe = bals.filter(b => b.v < 0).reduce((s, b) => s - b.v, 0);
   if (owed || owe) todo.push({ ic: I.split, cls: "acc", t: owed ? `Friends owe you ${money(owed)}` : `You owe ${money(owe)}`, s: owed && owe ? `You owe ${money(owe)}` : "Settle up or send a UPI request", go: "#/splits" });
   for (const r of St.reports().filter(r => r.status !== "reimbursed")) {
-    const ex = St.inReport(r.id), claim = ex.filter(e => e.reimb).reduce((s, e) => s + e.amount, 0);
+    const claim = St.claimOf(r);
     if (claim > 0) todo.push({ ic: I.folder, cls: r.status === "submitted" ? "good" : "", t: r.status === "submitted" ? `Waiting on ${money(claim)}` : `${money(claim)} to claim`, s: `Report · ${r.name}`, go: `#/report/${r.id}` });
   }
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
   const recent = [...all].sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 5);
-  const catMonth = {}; all.filter(e => e.date.startsWith(m)).forEach(e => catMonth[e.cat] = (catMonth[e.cat] || 0) + St.spendOf(e));
-  const topCats = Object.entries(catMonth).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const catMonth = {}; all.filter(e => e.date.startsWith(m)).forEach(e => catMonth[e.cat] = (catMonth[e.cat] || 0) + St.mine(e));
+  const topCats = Object.entries(catMonth).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const hi = Api.user ? `Hi, ${esc(Api.user.username)}` : "Home";
 
   $("view").innerHTML = top(hi, { right: syncPill() }) + `
     <section class="card hero" aria-label="This month">
-      <div class="hero-row"><div><div class="label">Spent in ${MONTHS[new Date().getMonth()]}</div><div class="big num">${moneyBig(month)}</div></div>
+      <div class="hero-row"><div><div class="label">Your spending in ${MONTHS[new Date().getMonth()]}</div><div class="big num">${moneyBig(month)}</div></div>
       <div class="hero-side"><div class="label">Today</div><b class="num">${moneyBig(todayTot)}</b></div></div>${budget}
+      ${officeMonth ? `<button type="button" class="office-line" data-go="#/reports"><span>Office &amp; reimbursable (not counted)</span><b>${moneyBig(officeMonth)}</b></button>` : ""}
     </section>
     <div class="quick">
       <button type="button" data-q="scan"><span class="i">${I.scan}</span>Scan</button>
@@ -142,7 +144,7 @@ function listHtml() {
   const dupes = St.duplicates(), f = SP.f;
   const res = applyFilters(St.expenses(), f, dupes).sort((a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0));
   SP.lastRes = res;
-  const tot = res.reduce((s, e) => s + St.spendOf(e), 0);
+  const tot = res.reduce((s, e) => s + St.mine(e), 0), off = res.reduce((s, e) => s + (St.isOffice(e) ? St.spendOf(e) : 0), 0);
   const dl = DATE_OPTS.find(o => o[0] === f.date.p)?.[1] || "Date";
   const dateLbl = f.date.p === "custom" ? `${f.date.from ? dShort(f.date.from) : "…"} – ${f.date.to ? dShort(f.date.to) : "…"}` : dl;
   const chip = (k, label, on) => `<button type="button" class="chip${on ? " on" : ""}" data-f="${k}">${esc(label)}${I.down}</button>`;
@@ -157,7 +159,7 @@ function listHtml() {
       ${chip("more", statusLbl || (f.tag ? `#${f.tag}` : more ? `More (${more})` : "More"), more)}
       ${activeCount(f) || f.q ? `<button type="button" class="chip" data-f="clear">${I.x}Clear</button>` : ""}
     </div>
-    <div class="res-h"><span><b>${plural(res.length, "expense")}</b>${res.length ? ` · ${money(tot)}` : ""}</span>${SP.selecting ? `<button type="button" class="link" data-act="selall">${SP.sel.size === res.length && res.length ? "Select none" : "Select all"}</button>` : ""}</div>
+    <div class="res-h"><span><b>${plural(res.length, "expense")}</b>${res.length ? ` · ${money(tot)}` : ""}${off ? ` <span class="office-note">+ ${money(off)} office</span>` : ""}</span>${SP.selecting ? `<button type="button" class="link" data-act="selall">${SP.sel.size === res.length && res.length ? "Select none" : "Select all"}</button>` : ""}</div>
     <div id="list" class="${SP.selecting ? "selecting" : ""}">${res.length ? groupedHtml(res.slice(0, SP.limit), { dupes, selected: SP.sel })
       + (res.length > SP.limit ? `<button type="button" class="btn secondary block" data-act="more">Show ${Math.min(300, res.length - SP.limit)} more</button>` : "")
       : St.expenses().length ? `<div class="card empty"><b>No matches</b>Try a different search or clear the filters.</div>`
@@ -181,10 +183,10 @@ async function bulkAction(ev) {
   if (b === "done") { SP.selecting = false; SP.sel.clear(); spend(); return; }
   if (!ids.length) return toast("Select some expenses first");
   if (b === "cat") {
-    const v = await pickList({ title: `Category for ${plural(ids.length, "expense")}`, options: CATS.map(c => ({ value: c.id, label: c.name, icon: c.emoji })) });
+    const v = await pickCategory({ title: `Category for ${plural(ids.length, "expense")}` });
     if (v) { ids.forEach(id => St.update(id, { cat: v })); toast(`Moved ${plural(ids.length, "expense")} to ${cat(v).name}`); }
   } else if (b === "report") {
-    const rs = St.reports().filter(r => r.status === "open");
+    const rs = St.activeReports();
     const v = await pickList({ title: "Add to report", options: [...rs.map(r => ({ value: r.id, label: r.name, sub: plural(St.inReport(r.id).length, "expense") })), { value: "__new", label: "+ New report" }, { value: "__none", label: "Remove from report" }] });
     if (!v) return;
     let rid = v; if (v === "__new") { const r = await newReport(); if (!r) return; rid = r.id; }
@@ -281,7 +283,7 @@ const CAL = { sel: today(), y: new Date().getFullYear(), m: new Date().getMonth(
 export function calendarGoto(d) { CAL.sel = d; CAL.y = +d.slice(0, 4); CAL.m = +d.slice(5, 7) - 1; }
 function calHtml() {
   const totals = new Map(), t = today();
-  St.expenses().forEach(e => { const v = totals.get(e.date) || { t: 0, n: 0 }; v.t += St.spendOf(e); v.n++; totals.set(e.date, v); });
+  St.expenses().forEach(e => { if (St.isOffice(e)) return; const v = totals.get(e.date) || { t: 0, n: 0 }; v.t += St.spendOf(e); v.n++; totals.set(e.date, v); });
   const first = new Date(CAL.y, CAL.m, 1).getDay(), n = daysIn(CAL.y, CAL.m);
   let max = 0, mTot = 0, mCount = 0;
   for (let d = 1; d <= n; d++) { const v = totals.get(`${CAL.y}-${pad(CAL.m + 1)}-${pad(d)}`); if (v) { max = Math.max(max, v.t); mTot += v.t; mCount += v.n; } }
@@ -324,7 +326,7 @@ document.addEventListener("touchend", (e) => {
 });
 function monthPicker() {
   let y = CAL.y;
-  const months = () => { const tot = {}; St.expenses().forEach(e => { if (e.date.startsWith(y + "-")) { const m = +e.date.slice(5, 7) - 1; tot[m] = (tot[m] || 0) + St.spendOf(e); } });
+  const months = () => { const tot = {}; St.expenses().forEach(e => { if (e.date.startsWith(y + "-")) { const m = +e.date.slice(5, 7) - 1; tot[m] = (tot[m] || 0) + St.mine(e); } });
     return MONTHS.map((m, i) => `<button type="button" data-m="${i}" aria-current="${y === CAL.y && i === CAL.m}">${m.slice(0, 3)}${tot[i] ? `<small>${compact(tot[i])}</small>` : ""}</button>`).join(""); };
   const s = sheet({ title: "Go to", center: true, body: `<div class="picker-year"><button class="icon-btn bordered" type="button" data-y="-1" aria-label="Previous year">${I.left}</button>
     <input id="pyIn" type="number" inputmode="numeric" aria-label="Year" value="${y}"><button class="icon-btn bordered" type="button" data-y="1" aria-label="Next year">${I.right}</button></div>
@@ -339,7 +341,7 @@ function monthPicker() {
 }
 
 // ---- insights ----
-const IN = { p: "month", a: today(), from: addDays(today(), -29), to: today(), sel: null };
+const IN = { p: "month", a: today(), from: addDays(today(), -29), to: today(), sel: null, office: false };
 function inRange(p = IN.p, a = IN.a) {
   if (p === "day") return [a, a];
   if (p === "week") { const s = weekStart(a); return [s, addDays(s, 6)]; }
@@ -383,7 +385,8 @@ function buckets(f, t) {
   return out;
 }
 function insightsHtml() {
-  const [f, t] = inRange(), [pf, pt] = inPrev(), all = St.expenses();
+  const [f, t] = inRange(), [pf, pt] = inPrev(), all = St.expenses().filter(e => IN.office || !St.isOffice(e));
+  const officeN = St.expenses().filter(e => St.isOffice(e) && e.date >= f && e.date <= t).length;
   const list = all.filter(e => e.date >= f && e.date <= t), total = list.reduce((s, e) => s + St.spendOf(e), 0);
   const prevTot = all.filter(e => e.date >= pf && e.date <= pt).reduce((s, e) => s + St.spendOf(e), 0);
   const tt = today(), elapsed = f > tt ? 0 : diffDays(f, t < tt ? t : tt) + 1, avg = total / Math.max(1, elapsed || diffDays(f, t) + 1);
@@ -393,9 +396,10 @@ function insightsHtml() {
   if (prevTot > 0) { const pc = Math.round((total - prevTot) / prevTot * 100); delta = `<span class="delta ${pc > 0 ? "up" : "down"}">${pc > 0 ? "▲" : pc < 0 ? "▼" : ""} ${Math.abs(pc)}%</span> <span class="muted small">vs previous ${unit} (${moneyBig(prevTot)})</span>`; }
   else if (total > 0) delta = `<span class="muted small">Nothing logged in the previous ${unit}</span>`;
   let h = `<div class="chips" style="margin-bottom:4px">${[["day", "Day"], ["week", "Week"], ["month", "Month"], ["year", "Year"], ["fy", "Financial year"], ["custom", "Custom"]].map(([k, l]) => `<button type="button" class="chip" data-p="${k}" aria-pressed="${IN.p === k}">${l}</button>`).join("")}</div>
+    ${officeN || IN.office ? `<label class="inline-row" style="margin:10px 2px 0"><span class="small">Include office &amp; reimbursable<small>${plural(officeN, "expense")} in this period</small></span><span class="switch"><input type="checkbox" id="inOffice" ${IN.office ? "checked" : ""}><i></i></span></label>` : ""}
     <div class="period"><button class="icon-btn bordered" type="button" data-i="prev" aria-label="Previous">${I.left}</button><b>${inLabel()}</b><button class="icon-btn bordered" type="button" data-i="next" aria-label="Next">${I.right}</button></div>
     ${IN.p === "custom" ? `<div class="row2" style="margin-bottom:12px"><label class="field"><span>From</span><input type="date" id="inFrom" value="${IN.from}"></label><label class="field"><span>To</span><input type="date" id="inTo" value="${IN.to}"></label></div>` : ""}
-    <div class="card"><div class="muted small">Total spent</div><div class="num" style="font-size:clamp(1.6rem,8vw,2.1rem);font-weight:750;line-height:1.15;white-space:nowrap">${moneyBig(total)}</div><div style="margin-top:4px">${delta}</div>
+    <div class="card"><div class="muted small">${IN.office ? "Total spent (incl. office)" : "Your spending"}</div><div class="num" style="font-size:clamp(1.6rem,8vw,2.1rem);font-weight:750;line-height:1.15;white-space:nowrap">${moneyBig(total)}</div><div style="margin-top:4px">${delta}</div>
     <div class="kpis"><div class="kpi"><span>Expenses</span><b>${list.length}</b></div><div class="kpi"><span>${IN.p === "day" ? "Average" : "Per day"}</span><b>${IN.p === "day" ? (list.length ? compact(total / list.length) : "₹0") : compact(avg)}</b></div><div class="kpi"><span>Biggest</span><b>${big ? compact(St.spendOf(big)) : "₹0"}</b></div></div></div>`;
   if (!list.length) return h + `<div class="card empty"><b>Nothing logged</b>No expenses in this ${unit}.</div>`;
   if (IN.p !== "day") h += `<div class="card"><h3>Spending over time</h3><div id="chartBox"></div><div class="chart-tip" id="chartTip"></div></div>`;
@@ -445,6 +449,7 @@ function insClick(ev) {
   return false;
 }
 export function insChange(ev) {
+  if (ev.target.id === "inOffice") { IN.office = ev.target.checked; IN.sel = null; spend(); }
   if (ev.target.id === "inFrom" && ev.target.value) { IN.from = ev.target.value; IN.sel = null; spend(); }
   if (ev.target.id === "inTo" && ev.target.value) { IN.to = ev.target.value; IN.sel = null; spend(); }
 }
@@ -473,7 +478,7 @@ export async function detail(id) {
   const c = cat(e.cat), dupes = St.duplicates(), dupOf = (dupes.get(e.id) || []).map(St.get).filter(Boolean), rep = St.reportOf(e), mine = St.spendOf(e);
   const flags = [];
   if (e.status === "scanning") flags.push(`<span class="pill">Scanning…</span>`);
-  if (e.reimb) flags.push(`<span class="pill open">Reimbursable</span>`);
+  if (St.isOffice(e)) flags.push(`<span class="pill open">${e.reimb ? "Reimbursable" : "Office"} · not in your spending</span>`);
   if (rep) flags.push(`<span class="pill">${I.folder}${esc(rep.name)}</span>`);
   (e.tags || []).forEach(t => flags.push(`<button type="button" class="pill" data-go="#/spend?tag=${encodeURIComponent(t)}">#${esc(t)}</button>`));
   const fr = (key, ic, label, val, ph) => `<button type="button" class="frow" data-edit="${key}">${ic}<span><small>${label}</small><b class="${val ? "" : "ph"}">${val || ph}</b></span><span class="chev">${I.right}</span></button>`;
@@ -508,7 +513,7 @@ export async function detail(id) {
       ${fr("tags", I.tag, "Tags", (e.tags || []).map(t => "#" + esc(t)).join(" "), "Add tags")}
       ${fr("report", I.folder, "Report", esc(rep?.name || ""), "Not on a report")}
       ${e.type === "distance" && e.distance ? fr("amount", I.car, "Trip", `${esc(e.distance.from || "?")} → ${esc(e.distance.to || "?")} · ${+e.distance.km}${e.distance.round ? " × 2" : ""} km × ₹${+e.distance.rate}`, "") : ""}
-      <label class="frow" style="cursor:pointer">${I.check}<span><small>Reimbursable</small><b>${e.reimb ? "Yes — someone will pay you back" : "No"}</b></span><span class="switch"><input type="checkbox" data-d="reimb" ${e.reimb ? "checked" : ""} aria-label="Reimbursable"><i></i></span></label>
+      <label class="frow" style="cursor:pointer">${I.check}<span><small>Reimbursable</small><b>${e.reimb ? "Yes — not counted in your spending" : "No"}</b></span><span class="switch"><input type="checkbox" data-d="reimb" ${e.reimb ? "checked" : ""} aria-label="Reimbursable"><i></i></span></label>
     </div></div>
     ${e.split ? `<div class="sec-h">Split<button type="button" data-d="editsplit">Edit</button></div><div class="card"><ul class="plain">${e.split.shares.map(s => `<li><span>${s.me ? "You" : esc(s.name)}${(s.me ? "me" : s.name) === e.split.paidBy || (s.me && e.split.paidBy === "me") ? `<small>paid ${money(e.split.total)}</small>` : ""}</span><b>${money(s.amt)}</b></li>`).join("")}</ul></div>` : ""}
     <div class="sec-h">Itemised receipt<button type="button" data-d="items">${items.length || extras.length ? "Edit" : "Add items"}</button></div>
@@ -540,10 +545,10 @@ async function editField(id, ed) {
   const e = St.get(id); if (!e) return;
   {
     if (e.split && ["amount", "what", "date"].includes(ed)) { openSplit({ id }); return true; }
-    if (ed === "cat") { const v = await pickList({ title: "Category", value: e.cat, options: CATS.map(c => ({ value: c.id, label: c.name, icon: c.emoji })) }); if (v && v !== e.cat) { St.update(id, { cat: v }); St.learn(e.what, v); } return true; }
+    if (ed === "cat") { const v = await pickCategory({ value: e.cat }); if (v && v !== e.cat) { St.update(id, { cat: v }); St.learn(e.what, v); } return true; }
     if (ed === "pay") { const v = await pickList({ title: "Paid with", value: e.pay || "", options: [{ value: "", label: "Not set" }, ...PAYS.map(p => ({ value: p, label: p }))] }); if (v !== null) St.update(id, { pay: v || undefined }); return true; }
     if (ed === "report") {
-      const rs = St.reports().filter(r => r.status === "open" || r.id === e.reportId);
+      const rs = St.reports().filter(r => r.status !== "reimbursed" || r.id === e.reportId);
       const v = await pickList({ title: "Report", value: e.reportId || "", options: [{ value: "", label: "Not on a report" }, ...rs.map(r => ({ value: r.id, label: r.name })), { value: "__new", label: "+ New report" }] });
       if (v === null) return true;
       if (v === "__new") { const r = await newReport(); if (r) St.update(id, { reportId: r.id }); } else St.update(id, { reportId: v || undefined });

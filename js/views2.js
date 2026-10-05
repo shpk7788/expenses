@@ -19,7 +19,7 @@ export function reports() {
   $("view").innerHTML = top("Reports", { right: `<button class="btn primary sm" type="button" data-r="new">${I.plus}New</button>` }) + `
     <div class="seg" role="tablist" style="margin-bottom:12px">${[["all", "All"], ["open", "Open"], ["submitted", "Submitted"], ["reimbursed", "Reimbursed"]].map(([k, l]) => `<button type="button" role="tab" data-rf="${k}" aria-selected="${repFilter === k}">${l}</button>`).join("")}</div>
     ${shown.length ? `<div class="card" style="padding:0">${shown.map(r => {
-      const ex = St.inReport(r.id), tot = ex.reduce((s, e) => s + e.amount, 0), claim = ex.filter(e => e.reimb).reduce((s, e) => s + e.amount, 0);
+      const ex = St.inReport(r.id), tot = ex.reduce((s, e) => s + e.amount, 0), claim = St.claimOf(r);
       const dates = ex.map(e => e.date).sort();
       return `<button type="button" class="rcard" data-go="#/report/${r.id}"><span class="ri-ico">${I.folder}</span>
         <span style="min-width:0"><b>${esc(r.name)}</b><small>${pill(r.status)}<span>${plural(ex.length, "expense")}${dates.length ? ` · ${dShort(dates[0])}${dates.length > 1 && dates.at(-1) !== dates[0] ? ` – ${dShort(dates.at(-1))}` : ""}` : ""}</span></small></span>
@@ -36,15 +36,16 @@ export function reportsClick(ev) {
 export function report(id) {
   const r = St.get(id);
   if (!r || r.deleted) { $("view").innerHTML = top("Report", { back: "#/reports" }) + `<div class="card empty"><b>Report not found</b><br><button class="btn secondary" data-go="#/reports" type="button">All reports</button></div>`; return; }
-  const ex = St.inReport(id).sort((a, b) => b.date.localeCompare(a.date)), tot = ex.reduce((s, e) => s + e.amount, 0), claim = ex.filter(e => e.reimb).reduce((s, e) => s + e.amount, 0);
+  const ex = St.inReport(id).sort((a, b) => b.date.localeCompare(a.date)), tot = ex.reduce((s, e) => s + e.amount, 0), claim = St.claimOf(r);
   const dates = ex.map(e => e.date).sort(), next = { open: ["submitted", "Mark as submitted"], submitted: ["reimbursed", "Mark as reimbursed"], reimbursed: ["open", "Reopen"] }[r.status];
   const byCat = {}; ex.forEach(e => byCat[e.cat] = (byCat[e.cat] || 0) + e.amount);
   $("view").innerHTML = top(r.name, { back: "#/reports", right: `<button class="icon-btn" type="button" data-rp="menu" aria-label="Report actions">${I.more}</button>` }) + `
     <section class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       <div><div class="muted small">Total</div><div class="num" style="font-size:1.9rem;font-weight:750;line-height:1.15">${moneyBig(tot)}</div>
       <div class="muted small" style="margin-top:2px">${plural(ex.length, "expense")}${dates.length ? ` · ${dMed(dates[0])}${dates.at(-1) !== dates[0] ? ` – ${dMed(dates.at(-1))}` : ""}` : ""}</div></div>${pill(r.status)}</div>
-      <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span>Reimbursable</span><b>${money(claim)}</b></div><div class="kpi"><span>${r.status === "reimbursed" ? "Reimbursed on" : r.status === "submitted" ? "Submitted on" : "Created"}</span><b>${dMed(new Date(r.statusAt || r.created).toISOString().slice(0, 10))}</b></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span>To claim</span><b>${money(claim)}</b></div><div class="kpi"><span>${r.status === "reimbursed" ? "Reimbursed on" : r.status === "submitted" ? "Submitted on" : "Created"}</span><b>${dMed(new Date(r.statusAt || r.created).toISOString().slice(0, 10))}</b></div></div>
       ${r.note ? `<p class="muted small" style="margin:12px 0 0">${esc(r.note)}</p>` : ""}
+      <label class="inline-row" style="margin-top:14px"><span>Office / reimbursable<small>${r.business !== false ? "Not counted in your personal spending" : "Counted in your personal spending"}</small></span><span class="switch"><input type="checkbox" id="repBiz" ${r.business !== false ? "checked" : ""}><i></i></span></label>
       <button type="button" class="btn primary block sm" style="margin-top:14px" data-rp="status">${next[1]}</button>
       <div class="rep-actions"><button type="button" class="btn secondary sm" data-rp="add">${I.plus}Add</button><button type="button" class="btn secondary sm" data-rp="pdf">${I.download}PDF</button><button type="button" class="btn secondary sm" data-rp="csv">${I.download}CSV</button></div></section>
     ${ex.length && Object.keys(byCat).length > 1 ? `<div class="card"><h3>By category</h3><ul class="plain">${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<li><span>${cat(c).emoji} ${esc(cat(c).name)}</span><b>${money(v)}</b></li>`).join("")}</ul></div>` : ""}
@@ -76,7 +77,7 @@ export async function reportClick(ev, id) {
   return true;
 }
 function pickExpenses(rid) {
-  const r = St.get(rid), list = St.expenses().filter(e => !e.reportId || e.reportId === rid).sort((a, b) => b.date.localeCompare(a.date));
+  const r = St.get(rid), list = St.expenses().filter(e => !e.reportId || e.reportId === rid || St.get(e.reportId)?.deleted).sort((a, b) => b.date.localeCompare(a.date));
   const sel = new Set(list.filter(e => e.reportId === rid).map(e => e.id));
   const s = sheet({ title: `Expenses in “${r.name}”`, sub: "Tick the ones that belong on this report", body: list.length ? `<div class="selecting"><ul class="rows" id="pkL" style="padding:0">${list.map(e => rowHtml(e, { selected: sel, showDate: true })).join("")}</ul></div>` : `<p class="muted">Every expense is already on another report.</p>`,
     foot: `<button type="button" class="btn primary" id="pkOk">Save · ${sel.size} selected</button>` });
@@ -161,7 +162,7 @@ export function account() {
       ${row("import", I.upload, "Import from CSV", "", "Adds rows, skips duplicates")}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Expenses · v6.0</p>`;
+    <p class="ver">Expenses · v6.1</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
@@ -282,4 +283,11 @@ async function doAuth(ev) {
   } catch (e) {
     err.textContent = e.message; btn.disabled = false; btn.textContent = authMode === "signup" ? "Create account" : "Sign in"; $("aPass").select();
   }
+}
+
+export function reportChange(ev, id) {
+  if (ev.target.id !== "repBiz") return;
+  const r = St.get(id); if (!r) return;
+  St.save({ ...r, business: ev.target.checked });
+  toast(ev.target.checked ? "Not counted in your spending anymore" : "Now counted in your spending");
 }

@@ -64,12 +64,16 @@ $("view").addEventListener("click", async (ev) => {
   if (row) go(`#/expense/${row.dataset.id}`);
 });
 $("view").addEventListener("input", (ev) => { if (route().name === "spend") V.spendInput(ev); });
-$("view").addEventListener("change", (ev) => { const r = route(); if (r.name === "expense") V.detailChange(ev, r.id); if (r.name === "spend") V.insChange(ev); });
+$("view").addEventListener("change", (ev) => { const r = route(); if (r.name === "expense") V.detailChange(ev, r.id); if (r.name === "spend") V.insChange(ev); if (r.name === "report") V2.reportChange(ev, r.id); });
 $("view").addEventListener("submit", (ev) => { const r = route(); if (r.name === "expense") V.detailSubmit(ev, r.id); });
 $("nav").addEventListener("click", (ev) => {
   if (ev.target.closest("#navCreate")) { const r = route(); openCreate({ reportId: r.name === "report" ? r.id : undefined }); return; }
-  const a = ev.target.closest("a.nav-tab"); if (a && anySheet()) { ev.preventDefault(); go(a.getAttribute("href")); }
 });
+// Route every in-app link through go(), so a panel that is still closing can't undo the navigation
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest('a[href^="#/"]'); if (!a || ev.defaultPrevented || ev.metaKey || ev.ctrlKey) return;
+  if (anySheet()) { ev.preventDefault(); go(a.getAttribute("href")); }
+}, true);
 
 // ---- auth gate ----
 function gate(detail) {
