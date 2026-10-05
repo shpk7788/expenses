@@ -3,6 +3,8 @@ import { LS, norm, r2, uuid, today, money, addDays, addMonths, diffDays } from "
 import { Api } from "./api.js";
 import { catFor, cat } from "./cats.js";
 import { Img, forgetUrl } from "./media.js";
+import { cleanMerchant, knownBrand } from "./importer.js";
+import { STORE_IDX } from "./cats.js";
 
 const listeners = new Set();
 export const on = (fn) => (listeners.add(fn), () => listeners.delete(fn));
@@ -34,7 +36,24 @@ export function load() {
   S.cursor = LS.get(K("cursor"), null);
   S.lastSynced = LS.get(K("synced"), 0);
   S.noBucket = false;
+  repairImports();
   runRecurring();
+}
+/** One-time repair for rows imported before v9: names misread as brands ("Subash" → "Ba&sh"), and people payments to sort */
+function repairImports() {
+  const brands = new Set(STORE_IDX.map(b => b.name)), fix = [];
+  for (const e of S.items) {
+    if (e.kind !== "expense" || e.deleted || !e.src?.text) continue;
+    let n = null;
+    if (brands.has(e.what) && !knownBrand(e.src.text)) {
+      const m = cleanMerchant(e.src.text), wasCat = catFor(e.what, {});
+      n = { ...e, what: m.name };
+      if (m.person) { n.toPerson = true; if (e.cat === wasCat || e.cat === "other") { n.cat = "other"; n.ask = true; } }
+    }
+    if (e.note === "Sent to a person") { n = { ...(n || e), toPerson: true }; delete n.note; if (n.cat === "other") n.ask = true; }
+    if (n) fix.push(n);
+  }
+  if (fix.length) setTimeout(() => saveMany(fix), 0);
 }
 export function persist() {
   const ok = LS.set(K("items"), S.items);
