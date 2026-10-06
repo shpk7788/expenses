@@ -20,6 +20,7 @@ export function home() {
   const all = St.expenses(), t = today(), m = t.slice(0, 7), P = St.prefs();
   const month = all.filter(e => e.date.startsWith(m)).reduce((s, e) => s + St.mine(e), 0);
   const todayTot = all.filter(e => e.date === t).reduce((s, e) => s + St.mine(e), 0);
+  const inMonth = St.incomes().filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0);
   const officeMonth = all.filter(e => e.date.startsWith(m) && St.isOffice(e)).reduce((s, e) => s + St.spendOf(e), 0);
   const d0 = new Date(), daysLeft = daysIn(d0.getFullYear(), d0.getMonth()) - d0.getDate() + 1;
   let budget = "";
@@ -52,6 +53,8 @@ export function home() {
   }
   const asks = all.filter(e => e.ask).length;
   if (asks) todo.unshift({ ic: I.split, cls: "acc", t: `${plural(asks, "payment")} to people`, s: "What were they for? Sort them in a few taps", go: "#/people" });
+  const misread = all.filter(e => e.src && !e.inChecked && /\bbank\b/i.test(e.what || "") && /\d{3,4}\s*$/.test(e.what || "") && /gpay|upi-app|phonepe|paytm/.test(e.src.from || "")).length;
+  if (misread) todo.unshift({ ic: I.arrowIn, cls: "acc", t: `${plural(misread, "import")} may be money you received`, s: "Counted as spending by an older import — check them", go: "#/income?check=1" });
   if (St.S.inbox.length) todo.unshift({ ic: I.bell, cls: "acc", t: `${plural(St.S.inbox.length, "new bank alert")}`, s: "Tap to review and add them", go: "#/import?inbox=1" });
   for (const r of all.filter(e => e.repeat)) { const d = St.nextDue(r), n = d && diffDays(t, d); if (n != null && n <= 3) todo.push({ ic: I.repeat, t: `${r.what} · ${money(r.amount)} ${n === 1 ? "tomorrow" : n === 0 ? "today" : `in ${n} days`}`, s: `Repeats ${St.REPEATS[r.repeat.every].toLowerCase()} — added automatically on ${dShort(d)}`, go: `#/expense/${r.id}` }); }
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
@@ -64,13 +67,12 @@ export function home() {
       <div class="hero-top"><span>Spent in ${MONTHS[new Date().getMonth()]}</span><span class="hero-pill">Today <b>${moneyBig(todayTot)}</b></span></div>
       <div class="hero-big num" data-count="${month}">${moneyHero(month)}</div>
       ${budget}
+      ${inMonth ? `<button type="button" class="hero-in" data-go="#/income"><span>Received <b>+${moneyBig(inMonth)}</b></span><span>${inMonth >= month ? `<b>${moneyBig(inMonth - month)}</b> left` : `<b>${moneyBig(month - inMonth)}</b> over`}</span>${I.right}</button>` : ""}
       ${officeMonth ? `<button type="button" class="hero-office" data-go="#/reports"><span>Office &amp; reimbursable · not counted</span><b>${moneyBig(officeMonth)}</b></button>` : ""}
     </section>
-    <div class="quick">
-      <button type="button" data-q="scan"><span class="i">${I.scan}</span>Scan</button>
-      <button type="button" data-q="manual"><span class="i">${I.pen}</span>Manual</button>
-      <button type="button" data-q="distance"><span class="i">${I.car}</span>Distance</button>
-      <button type="button" data-q="split"><span class="i">${I.split}</span>Split</button>
+    <div class="quick flow">
+      <button type="button" class="flow-btn out" data-q="manual"><span class="fi">${I.arrowOut}</span><span><b>Spent</b><small>Money out</small></span></button>
+      <button type="button" class="flow-btn in" data-q="income"><span class="fi">${I.arrowIn}</span><span><b>Received</b><small>Money in</small></span></button>
     </div>
     <div class="sec-h">To-do</div>
     <div class="todo">${todo.length ? todo.map(x => `<button type="button" data-go="${x.go}"><span class="ti ${x.cls || ""}">${x.ic}</span><span><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span><span class="chev">${I.right}</span></button>`).join("")
@@ -84,11 +86,12 @@ export function home() {
       ${budgetRows.length ? "" : `<button type="button" class="link" data-act="budget" style="margin-top:10px">${I.plus}Set budgets for categories</button>`}</div>` : ""}
     <div class="sec-h">Recent<button type="button" data-go="#/spend">See all</button></div>
     ${recent.length ? `<div class="group"><ul class="rows">${recent.map(e => rowHtml(e, { dupes, showDate: true })).join("")}</ul></div>`
-      : `<div class="card empty"><b>No expenses yet</b>Scan a receipt or add one manually to get started.<br><button type="button" class="btn primary" data-q="scan">${I.scan}Scan a receipt</button></div>`}`;
+      : `<div class="card empty"><b>Nothing here yet</b>Tap Spent when you pay for something, or import a bank or Google Pay statement.<br><button type="button" class="btn secondary" data-go="#/import">${I.upload}Import a statement</button></div>`}`;
   hydrateThumbs($("view"));
 }
 export function homeClick(ev) {
   const q = ev.target.closest("[data-q]")?.dataset.q;
+  if (q === "income") import("./income.js").then(m => m.openIncome());
   if (q === "scan") startScan(); else if (q === "manual") openForm(); else if (q === "distance") openForm({ type: "distance" }); else if (q === "split") openSplit();
   if (ev.target.closest("[data-act=budget]")) editBudget();
 }
@@ -206,6 +209,7 @@ function renderBulk() {
   bar.innerHTML = `<div class="cnt"><b>${sel.length} selected</b>${money(tot)}</div>
     <button type="button" data-b="cat" aria-label="Change category" title="Category">${I.tag}</button>
     <button type="button" data-b="report" aria-label="Add to report" title="Add to report">${I.folder}</button>
+    <button type="button" data-b="moneyin" aria-label="These were money in" title="Money in">${I.arrowIn}</button>
     <button type="button" data-b="export" aria-label="Export selected" title="Export CSV">${I.download}</button>
     <button type="button" data-b="delete" aria-label="Delete selected" title="Delete">${I.trash}</button>
     <button type="button" data-b="done" aria-label="Done" title="Done">${I.x}</button>`;
@@ -225,6 +229,13 @@ async function bulkAction(ev) {
     let rid = v; if (v === "__new") { const r = await newReport(); if (!r) return; rid = r.id; }
     St.saveMany(ids.map(id => { const n = { ...St.get(id) }; if (rid === "__none") delete n.reportId; else n.reportId = rid; return n; }));
     toast(rid === "__none" ? "Removed from report" : `Added ${plural(ids.length, "expense")} to ${St.get(rid).name}`);
+  } else if (b === "moneyin") {
+    const ok = ids.filter(id => !St.get(id).split);
+    if (!await confirmBox({ title: `Move ${plural(ok.length, "payment")} to money in?`, text: "Use this for money you received that was counted as spending. They'll leave your spending totals.", ok: "Move to money in" })) return;
+    const { incomeCatFor } = await import("./cats.js");
+    ok.forEach(id => { const e = St.get(id); St.toIncome(id, incomeCatFor(`${e.what} ${e.note || ""}`, !!e.toPerson)); });
+    SP.selecting = false; SP.sel.clear(); spend();
+    toast(`Moved ${plural(ok.length, "payment")} to money in`, () => ok.forEach(id => St.toExpense(id)));
   } else if (b === "export") exportCsv(ids.map(St.get), "selected");
   else if (b === "delete") {
     if (!await confirmBox({ title: `Delete ${plural(ids.length, "expense")}?`, text: "You can undo this right after.", ok: "Delete", danger: true })) return;
@@ -635,6 +646,7 @@ async function detailAction(ev, id, e) {
   else if (d === "menu") {
     const s = sheet({ title: "Expense", body: `<div class="menu">
       <button type="button" data-m="edit"><span class="mi">${I.pen}</span><span><b>Edit</b><small>Change any detail</small></span></button>
+      ${e.split ? "" : `<button type="button" data-m="moneyin"><span class="mi">${I.arrowIn}</span><span><b>This was money in</b><small>Received, not spent — moves it out of spending</small></span></button>`}
       <button type="button" data-m="dup"><span class="mi">${I.copy}</span><span><b>Duplicate</b><small>Make a copy dated today</small></span></button>
       <button type="button" data-m="report"><span class="mi">${I.folder}</span><span><b>Move to report</b><small>${esc(St.reportOf(e)?.name || "Not on a report")}</small></span></button>
       <button type="button" data-m="del" class="danger"><span class="mi">${I.trash}</span><span><b>Delete</b><small>You can undo right after</small></span></button></div>` });
@@ -644,6 +656,7 @@ async function detailAction(ev, id, e) {
         if (m === "edit") openForm({ id });
         else if (m === "dup") { const n = JSON.parse(JSON.stringify(e)); Object.assign(n, { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), date: today(), created: Date.now(), comments: [], status: undefined, img: undefined, imgV: undefined, notDup: [e.id] }); Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); go(`#/expense/${n.id}`); toast("Duplicated"); }
         else if (m === "report") editField(id, "report");
+        else if (m === "moneyin") import("./cats.js").then(({ incomeCatFor }) => { St.toIncome(id, incomeCatFor(`${e.what} ${e.note || ""}`, !!e.toPerson)); go("#/income"); toast("Moved to money in", () => St.toExpense(id)); });
         else if (m === "del") { const copy = St.remove(id); go("#/spend"); toast("Expense deleted", () => St.restore(copy)); }
       }));
     });

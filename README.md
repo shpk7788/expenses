@@ -10,6 +10,9 @@ A personal expense tracker modelled on Expensify, built for India.
 **Splits** — balances per friend, settle up, UPI payment requests.
 **Account** — username/password sync across devices, budget, default currency, UPI ID, distance rates, theme, learned categories, CSV import/export.
 
+## Money in
+Home has two buttons: **Spent** (money out) and **Received** (money in). Money in (salary, someone paying you back, refunds, interest) is stored as its own record type, never counted as spending; Home shows what was received and what's left this month, and **#/income** lists it. Imported credits become money in automatically, and re-importing a statement fixes rows an older import counted as spending.
+
 ## Importing bank statements and SMS
 - **Account → Import statement or SMS** (or **+ → Import**): bank statements (PDF, Excel, CSV; locked PDFs ask for the password), Google Pay / PhonePe / Paytm statement PDFs, pasted bank SMS, or a Palli CSV backup. Everything is parsed on the device (`js/importer.js`), sorted into categories, checked for duplicates, and shown for review before anything is saved.
 - **Shared into Palli**: on Android (installed app) share a bank SMS or statement file to Palli; or open `https://app.snyp.io/?sms=<text>`.

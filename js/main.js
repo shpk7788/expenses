@@ -7,13 +7,14 @@ import { openCreate, resumeScans } from "./create.js";
 import * as V from "./views.js";
 import * as V2 from "./views2.js";
 import * as IV from "./importview.js";
+import * as INC from "./income.js";
 
 const TABS = [["home", "Home", I.home], ["spend", "Spend", I.spend], ["create"], ["reports", "Reports", I.reports], ["account", "Account", I.account]];
 function drawNav() {
   const r = route().name, badge = St.expenses().filter(e => e.status === "review" || e.status === "failed").length + St.duplicates().size + St.S.inbox.length;
   $("nav").innerHTML = `<div class="nav-in"><div class="brand"><span class="logo">${LOGO}</span><h1>Palli</h1></div>${TABS.map(([k, l, ic]) => k === "create"
     ? `<button type="button" class="nav-create" id="navCreate" aria-label="Create">${I.plus}<span class="lbl">Create</span></button>`
-    : `<a class="nav-tab" href="#/${k}" ${r === k || (k === "spend" && r === "expense") || (k === "reports" && r === "report") || (k === "home" && (r === "splits" || r === "people")) || (k === "account" && r === "import") ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${k === "home" && badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")}</div>`;
+    : `<a class="nav-tab" href="#/${k}" ${r === k || (k === "spend" && r === "expense") || (k === "reports" && r === "report") || (k === "home" && (r === "splits" || r === "people" || r === "income")) || (k === "account" && r === "import") ? 'aria-current="page"' : ""}>${ic}<span>${l}</span>${k === "home" && badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")}</div>`;
 }
 function route() {
   const h = location.hash.replace(/^#\/?/, ""), [path, qs = ""] = h.split("?"), [name = "home", id] = path.split("/");
@@ -40,10 +41,11 @@ function render() {
     case "account": V2.account(); break;
     case "import": IV.importView(r.params); break;
     case "people": IV.peopleView(); break;
+    case "income": INC.incomeView(r.params); break;
     default: V.home();
   }
   drawNav();
-  document.title = { home: "Palli", spend: "Spend · Palli", expense: "Expense · Palli", reports: "Reports · Palli", report: "Report · Palli", splits: "Splits · Palli", account: "Account · Palli", import: "Import · Palli", people: "Sort payments · Palli" }[r.name] || "Palli";
+  document.title = { home: "Palli", spend: "Spend · Palli", expense: "Expense · Palli", reports: "Reports · Palli", report: "Report · Palli", splits: "Splits · Palli", account: "Account · Palli", import: "Import · Palli", people: "Sort payments · Palli", income: "Money in · Palli" }[r.name] || "Palli";
   if (changed) { scrollTo(0, 0); const v = $("view"); v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); clearTimeout(render._t); render._t = setTimeout(() => v.classList.remove("enter"), 700); } else scrollTo(0, y);
   // totals count up when they change
   document.querySelectorAll("#view [data-count]").forEach(el => { const to = +el.dataset.count, key = r.name + el.className, from = render._counts?.[key] ?? (changed ? 0 : to); (render._counts ||= {})[key] = to; countUp(el, to, moneyHero, from); });
@@ -68,6 +70,7 @@ $("view").addEventListener("click", async (ev) => {
   if (r.name === "account" && await V2.accountClick(ev)) return;
   if (r.name === "import" && await IV.importClick(ev)) return;
   if (r.name === "people" && await IV.peopleClick(ev)) return;
+  if (r.name === "income" && await INC.incomeClick(ev)) return;
   const row = ev.target.closest(".erow[data-id]");
   if (row) go(`#/expense/${row.dataset.id}`);
 });

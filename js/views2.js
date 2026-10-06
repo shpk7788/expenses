@@ -164,7 +164,7 @@ export function account() {
       ${u ? row("alerts", I.bell, "Automatic bank alerts", "", "Forward payment SMS to Palli") : ""}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Palli · v9.0</p>`;
+    <p class="ver">Palli · v10.0</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;

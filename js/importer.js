@@ -1,7 +1,7 @@
 // Turn bank SMS, UPI app statements and bank statements into transactions.
 // Everything runs on-device; files never leave the phone.
 import { norm, r2, pad } from "./util.js";
-import { STORE_IDX, catFor } from "./cats.js";
+import { STORE_IDX, catFor, incomeCatFor } from "./cats.js";
 
 const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
 const MONRE = "jan|feb|mar|apr|may|jun|jul|aug|sept|sep|oct|nov|dec";
@@ -119,8 +119,8 @@ const payFrom = (s) => /\bupi\b|@/i.test(s) ? "UPI" : /\b(pos|card|ecom|visa|mas
 function txn({ date, amount, desc, raw, dir, ref, source, pay, bal }) {
   desc = String(desc || "").replace(/\s+/g, " ").trim().slice(0, 300);
   const m = cleanMerchant(desc), all = `${desc} ${raw || ""}`;
-  const skip = dir === "in" ? "Money received" : (SKIP.find(([re]) => re.test(all)) || [])[1];
-  if (skip && /card/i.test(skip)) m.name = "Credit card bill";
+  const skip = (SKIP.find(([re]) => re.test(all)) || [])[1] || null;
+  if (skip && /card/i.test(skip) && dir === "out") m.name = "Credit card bill";
   if (!ref) ref = (/\b(\d{12})\b/.exec(all) || [])[1];   // UPI RRN
   return { date, amount: r2(Math.abs(amount)), desc, merchant: m.name, vpa: m.vpa, person: m.person, cash: m.cash, dir, ref: ref || "", source,
     pay: pay || (m.cash ? "Cash" : payFrom(all)), skip: skip || null, ...(bal != null ? { bal } : {}) };
@@ -230,22 +230,33 @@ export function parseTable(rows, source = "bank") {
   return out;
 }
 
-const UPI_APP = /(paid to|money sent to|sent to|received from|transfer to|bill paid to|bill paid for|recharge of|mobile recharged|recharged|self transfer to)\s+(.+?)\s+(?:(debit|credit|dr|cr)\b|₹|\brs\.?\s*\d|\binr\s*\d|upi transaction|transaction id|utr|paid by|\d{1,2}:\d{2}|$)/i;
+const UPI_APP = /(paid to|money sent to|sent to|received from|money received from|transfer(?:red)? to|bill paid to|bill paid for|recharge of|mobile recharged|recharged|self transfer to)\s+(.+?)\s*(?=\||(?:debit|credit|dr|cr)\b|₹|\brs\.?\s*\d|\binr\s*\d|upi transaction|transaction id|utr|paid by|\d{1,2}:\d{2}|[\d,]*\d(?:\.\d{1,2})?\s*(?:\||$)|$)/i;
+// words in some PDFs come out as separate pieces ("Received  from") — squash spacing before matching
+const squash = (l) => String(l).replace(/[  -​]/g, " ").replace(/\s+/g, " ").trim();
 function parseUpiApp(lines, source) {
   const blocks = []; let cur = null;
   const startRe = new RegExp(`^\\s*(\\d{1,2}[\\s\\-]?(?:${MONRE})|(?:${MONRE})[a-z]*\\s+\\d{1,2}|\\d{1,2}[\\/\\-.]\\d{1,2}[\\/\\-.]\\d{2,4})`, "i");
-  for (const l of lines) {
+  for (const raw of lines) {
+    const l = squash(raw); if (!l) continue;
     const d = startRe.test(l) && findDate(l);
     if (d) { cur = { date: d, lines: [l] }; blocks.push(cur); }
     else if (cur && cur.lines.length < 8) cur.lines.push(l);
   }
   const out = [];
   for (const b of blocks) {
-    const t = b.lines.join("  ");
+    const t = b.lines.join(" | ");
     const m = UPI_APP.exec(t);
-    const a = /₹\s*([\d,]+(?:\.\d{1,2})?)/.exec(t) || /(?:\brs\.?|\binr)\s*([\d,]+(?:\.\d{1,2})?)\b/i.exec(t);
-    if (!m || !a) continue;
-    const dir = /received from/i.test(m[1]) || /\b(credit|cr)\b/i.test(m[3] || "") ? "in" : "out";
+    if (!m) continue;
+    // amount: ₹ first, then Rs/INR, then (if the ₹ glyph was lost in the PDF) the number ending the first line
+    const a = /₹\s*([\d,]+(?:\.\d{1,2})?)/.exec(t) || /(?:\brs\.?|\binr)\s*([\d,]+(?:\.\d{1,2})?)\b/i.exec(t)
+      || /(?:^|\s)([\d,]*\d(?:\.\d{1,2})?)\s*$/.exec(b.lines[0].replace(DATE_TOKEN, " ").replace(/\b\d{1,2}:\d{2}\s*(?:am|pm)?\b/gi, " ").trim());
+    if (!a || !(num(a[1]) > 0)) continue;
+    // direction: the description says it ("Received from"), else the instrument line ("Paid by <bank>" = money out, "Paid to <bank>" after it = money in)
+    let dir;
+    if (/received from|money received/i.test(m[1]) || /\b(credit|cr)\b/i.test(t.slice(m.index, m.index + m[0].length + 12)) && !/\bdebit\b/i.test(m[0])) dir = "in";
+    else if (/^(paid to|money sent to|sent to|transfer|bill paid|recharge|mobile recharged|recharged|self transfer)/i.test(m[1])) dir = "out";
+    if (dir === "out" && /\|\s*paid to\b[^|]*\bbank\b/i.test(t) && !/\|\s*paid by\b/i.test(t) && /received/i.test(t)) dir = "in";
+    if (!dir) dir = /\|\s*paid by\b/i.test(t) ? "out" : "in";
     const refM = /(?:upi transaction id|transaction id|utr(?: no)?\.?)[:\s]*([A-Za-z0-9]{8,})/i.exec(t);
     const desc = /recharge/i.test(m[1]) ? `Mobile recharge ${m[2]}` : m[2];
     out.push(txn({ date: b.date, amount: num(a[1]), desc, raw: t, dir, ref: refM?.[1], source, pay: "UPI" }));
@@ -319,7 +330,7 @@ export function parseStatementLines(lines, source = "bank") {
 const close = (a, b) => { a = norm(a); b = norm(b); return !!a && !!b && (a.includes(b.slice(0, 5)) || b.includes(a.slice(0, 5))); };
 const dayGap = (a, b) => Math.abs((new Date(a) - new Date(b)) / 864e5);
 /** Categorise, flag duplicates against what's already in the app, and pick defaults */
-export function prepare(txns, { existing = [], rules = {}, people = {} } = {}) {
+export function prepare(txns, { existing = [], existingIn = [], rules = {}, people = {} } = {}) {
   // within one import: only collapse rows we can prove are the same (same UPI ref, same SMS, same running balance)
   const uniq = new Map(), list = [];
   for (const t of txns) {
@@ -329,16 +340,27 @@ export function prepare(txns, { existing = [], rules = {}, people = {} } = {}) {
     list.push(t);
   }
   // against expenses already in Palli: each existing expense can match at most one imported row
-  const pool = new Map();
-  for (const e of existing) { const k = r2(e.amount); (pool.get(k) || pool.set(k, []).get(k)).push(e); }
-  const refs = new Map(existing.filter(e => e.src?.ref).map(e => [e.src.ref, e]));
+  const mkPool = (list) => { const p = new Map(); for (const e of list) { const k = r2(e.amount); (p.get(k) || p.set(k, []).get(k)).push(e); } return p; };
+  const pool = mkPool(existing), poolIn = mkPool(existingIn);
+  const refs = new Map(existing.filter(e => e.src?.ref).map(e => [e.src.ref, e])), refsIn = new Map(existingIn.filter(e => e.src?.ref).map(e => [e.src.ref, e]));
   const used = new Set();
   for (const t of list) {
     // people you've told Palli about ("Subash" → "Gym trainer Subash", Health)
     const who = people[norm(t.merchant)];
     if (who) { if (who.name) t.merchant = who.name; t.knownPerson = true; }
+    if (t.dir === "in") {
+      t.cat = who?.inCat || incomeCatFor(`${t.desc} ${t.raw || ""}`, t.person);
+      let hit = t.ref && refsIn.get(t.ref);
+      if (!hit) hit = (poolIn.get(r2(t.amount)) || []).find(e => !used.has(e.id) && (e.date === t.date || (dayGap(e.date, t.date) <= 1 && close(e.what, t.merchant))) && !(t.ref && e.src?.ref && e.src.ref !== t.ref));
+      if (hit && !used.has(hit.id)) { used.add(hit.id); t.dup = true; t.dupOf = hit.what; }
+      else { // an earlier import counted this money in as spending → fix that expense instead of adding a new one
+        const wrong = (t.ref && refs.get(t.ref)) || (pool.get(r2(t.amount)) || []).find(e => !used.has(e.id) && e.src && e.date === t.date);
+        if (wrong && !used.has(wrong.id)) { used.add(wrong.id); t.fixes = wrong.id; t.fixesWhat = wrong.what; }
+      }
+      t.on = !t.skip && !t.dup;
+      continue;
+    }
     t.cat = rules[norm(t.merchant)] || (t.cash || (t.person && !who) ? "other" : catFor(t.merchant, rules));
-    if (t.dir !== "out") { t.on = false; continue; }
     let hit = t.ref && refs.get(t.ref);
     if (hit && used.has(hit.id)) hit = null;
     if (!hit) {

@@ -12,6 +12,7 @@ export function openCreate(ctx = {}) {
   const s = sheet({ title: rep ? `Add to “${rep.name}”` : "Create", body: `<div class="menu">
     <button type="button" data-a="scan"><span class="mi">${I.scan}</span><span><b>Scan receipts</b><small>Snap one or more — details fill in automatically</small></span></button>
     <button type="button" data-a="manual"><span class="mi">${I.pen}</span><span><b>Manual expense</b><small>Type in the amount and merchant</small></span></button>
+    ${rep ? "" : `<button type="button" data-a="income"><span class="mi">${I.arrowIn}</span><span><b>Money received</b><small>Salary, someone paying you back, a refund</small></span></button>`}
     <button type="button" data-a="distance"><span class="mi">${I.car}</span><span><b>Distance</b><small>Kilometres × your rate per km</small></span></button>
     <button type="button" data-a="split"><span class="mi">${I.split}</span><span><b>Split with friends</b><small>Track who owes whom</small></span></button>
     ${rep ? "" : `<button type="button" data-a="import"><span class="mi">${I.upload}</span><span><b>Import statement or SMS</b><small>Bank, Google Pay or PhonePe — sorted for you</small></span></button>`}
@@ -29,6 +30,7 @@ export function openCreate(ctx = {}) {
       else if (a === "split") openSplit({ date: ctx.date, reportId: ctx.reportId });
       else if (a === "existing") ctx.pickExisting?.();
       else if (a === "import") go("#/import");
+      else if (a === "income") import("./income.js").then(m => m.openIncome({ date: ctx.date }));
       else if (a === "report") newReport().then(r => r && go(`#/report/${r.id}`));
     });
   });

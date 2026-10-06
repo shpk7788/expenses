@@ -1,10 +1,10 @@
 // Import screen: bank / Google Pay / PhonePe statements, pasted SMS, and alerts forwarded automatically.
 // Files are read on the phone — nothing is uploaded.
 import { $, esc, norm, r2, money, today, plural, dayLabel, dShort, monthStart, addMonths, I } from "./util.js";
-import { cat, CATS } from "./cats.js";
+import { cat, CATS, INCATS, incat } from "./cats.js";
 import * as St from "./store.js";
 import { Api } from "./api.js";
-import { sheet, toast, go, pickCategory, promptBox, confirmBox } from "./ui.js";
+import { sheet, toast, go, pickCategory, pickList, promptBox, confirmBox } from "./ui.js";
 import { top } from "./views.js";
 import * as P from "./importer.js";
 
@@ -30,7 +30,7 @@ async function pdfLines(buf, password) {
     const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0, h: Math.abs(i.transform[3]) || 8 }));
     items.sort((a, b) => b.y - a.y || a.x - b.x);
     let row = [], y = null;
-    const flush = () => { if (!row.length) return; row.sort((a, b) => a.x - b.x); let out = "", end = null; for (const it of row) { out += end == null ? it.s : (it.x - end > 2 ? "  " : "") + it.s; end = it.x + it.w; } lines.push(out.replace(/\s+$/, "")); row = []; };
+    const flush = () => { if (!row.length) return; row.sort((a, b) => a.x - b.x); let out = "", end = null; for (const it of row) { const g = end == null ? 0 : it.x - end; out += end == null ? it.s : (g > it.h * 1.2 ? "  " : g > it.h * 0.12 && !/\s$/.test(out) && !/^\s/.test(it.s) ? " " : "") + it.s; end = it.x + it.w; } lines.push(out.replace(/\s+$/, "")); row = []; };
     for (const it of items) { if (y != null && Math.abs(it.y - y) > Math.max(2, it.h * 0.45)) flush(); if (!row.length) y = it.y; row.push(it); }
     flush();
   }
@@ -61,7 +61,7 @@ async function readFile(file, password) {
 }
 
 function load(txns, label) {
-  const pr = St.prefs(), rows = P.prepare(txns, { existing: St.expenses(), rules: pr.rules, people: pr.people });
+  const pr = St.prefs(), rows = P.prepare(txns, { existing: St.expenses(), existingIn: St.incomes(), rules: pr.rules, people: pr.people });
   if (!rows.length) { IM.err = "No transactions found. If this is a scanned (photo) PDF, download the statement again from your bank's app or net banking as a regular PDF, Excel or CSV."; IM.rows = null; return; }
   IM.rows = rows; IM.label = label; IM.err = "";
   const m = monthStart(today());
@@ -157,12 +157,13 @@ const inRange = (t) => {
 };
 const visible = () => IM.rows.map((t, i) => ({ t, i })).filter(({ t }) => inRange(t) && (!IM.who || (t.person && t.dir === "out")));
 function review() {
-  const vis = visible(), sel = vis.filter(x => x.t.on), tot = sel.reduce((s, x) => s + x.t.amount, 0);
+  const vis = visible(), sel = vis.filter(x => x.t.on), out = sel.filter(x => x.t.dir === "out"), inn = sel.filter(x => x.t.dir === "in");
+  const tot = out.reduce((s, x) => s + x.t.amount, 0), totIn = inn.reduce((s, x) => s + x.t.amount, 0);
   const m = monthStart(today()), cnt = (r) => IM.rows.filter(t => (r === "month" ? t.date >= m : r === "last" ? t.date >= addMonths(m, -1) && t.date < m : r === "3m" ? t.date >= addMonths(m, -2) : true)).length;
   const ranges = [["month", "This month"], ["last", "Last month"], ["3m", "Last 3 months"], ["all", "Everything"]].filter(([k]) => k === "all" || cnt(k));
   const skipped = vis.length - sel.length, people = IM.rows.filter(t => inRange(t) && t.person && t.dir === "out" && !t.knownPerson && t.cat === "other").length;
   let html = "", day = "", rows = [];
-  const flush = () => { if (rows.length) html += `<div class="group"><div class="ghead"><span>${dayLabel(day)}</span><span>${money(rows.filter(x => x.t.on).reduce((s, x) => s + x.t.amount, 0))}</span></div><ul class="rows selecting">${rows.map(row).join("")}</ul></div>`; rows = []; };
+  const flush = () => { if (rows.length) html += `<div class="group"><div class="ghead"><span>${dayLabel(day)}</span><span>${money(rows.filter(x => x.t.on && x.t.dir === "out").reduce((s, x) => s + x.t.amount, 0))}${rows.some(x => x.t.on && x.t.dir === "in") ? ` <span class="in-note">+${money(rows.filter(x => x.t.on && x.t.dir === "in").reduce((s, x) => s + x.t.amount, 0))}</span>` : ""}</span></div><ul class="rows selecting">${rows.map(row).join("")}</ul></div>`; rows = []; };
   for (const x of vis) { if (x.t.date !== day) { flush(); day = x.t.date; } rows.push(x); }
   flush();
   return top("Review import", { right: `<button type="button" class="link" data-im="restart">Start over</button>` }) + `
@@ -172,18 +173,18 @@ function review() {
     <p class="muted small" style="margin:4px 0 12px">Sorted into categories for you. Tap a row to include or skip it, the icon to change its category, or the name to rename it.</p>
     ${ranges.length > 1 ? `<div class="chips">${ranges.map(([k, l]) => `<button type="button" class="chip" data-range="${k}" aria-pressed="${IM.range === k}">${l} <span class="muted">${cnt(k)}</span></button>`).join("")}</div>` : ""}
     ${people || IM.who ? `<button type="button" class="imp-people" data-im="who" aria-pressed="${IM.who}">${I.split}<span><b>${IM.who ? "Showing payments to people" : `${plural(people, "payment")} to people`}</b><small>${IM.who ? "Tap to show everything" : "Tell Palli who they are once — it remembers"}</small></span></button>` : ""}
-    <div class="imp-links"><button type="button" class="link" data-im="all">Select all spending</button><button type="button" class="link" data-im="none">Clear</button></div>
+    <div class="imp-links"><button type="button" class="link" data-im="all">Select all</button><button type="button" class="link" data-im="none">Clear</button></div>
   </section>
   ${IM.unread.length ? `<section class="card imp-unread"><b>${plural(IM.unread.length, "alert")} Palli couldn't read</b><p class="muted small">Add these by hand if they were payments.</p>${IM.unread.map(r => `<p class="raw">${esc(r.msg)}</p>`).join("")}<button type="button" class="btn secondary sm" data-im="dismiss">Dismiss ${IM.unread.length > 1 ? "them" : "it"}</button></section>` : ""}
   ${vis.length ? html : IM.rows.length ? `<div class="empty"><p>Nothing in this period.</p></div>` : ""}
-  ${skipped ? `<p class="muted small imp-foot">${plural(skipped, "row")} left out — money received, card bill payments, transfers to your own accounts, investments and likely duplicates are skipped unless you tick them.</p>` : ""}
-  <div class="imp-bar"><div class="cnt"><b>${plural(sel.length, "expense")}</b><span>${money(tot)}</span></div><button type="button" class="btn primary" data-im="add" ${sel.length ? "" : "disabled"}>Add ${sel.length || ""}</button></div>`;
+  ${skipped ? `<p class="muted small imp-foot">${plural(skipped, "row")} left out — card bill payments, transfers between your own accounts, investments and likely duplicates are skipped unless you tick them.</p>` : ""}
+  <div class="imp-bar"><div class="cnt"><b>${[out.length && plural(out.length, "expense"), inn.length && `${inn.length} money in`].filter(Boolean).join(" · ") || "Nothing selected"}</b><span>${out.length ? money(tot) : ""}${inn.length ? `${out.length ? " · " : ""}<span class="in-note">+${money(totIn)}</span>` : ""}</span></div><button type="button" class="btn primary" data-im="add" ${sel.length ? "" : "disabled"}>Add ${sel.length || ""}</button></div>`;
 }
 function row({ t, i }) {
-  const c = cat(t.cat), bits = [t.pay, t.desc && norm(t.desc) !== norm(t.merchant) ? t.desc : ""].filter(Boolean).map(esc);
+  const c = t.dir === "in" ? incat(t.cat) : cat(t.cat), bits = [t.pay, t.desc && norm(t.desc) !== norm(t.merchant) ? t.desc : ""].filter(Boolean).map(esc);
   const flags = [];
-  if (t.dir === "in") flags.push(`<span class="pill good">Received</span>`);
-  else if (t.skip) flags.push(`<span class="pill" title="${esc(t.skip)}">${esc(/card/i.test(t.skip) ? "Card bill" : /own/i.test(t.skip) ? "Own transfer" : t.skip)}</span>`);
+  if (t.dir === "in") flags.push(t.fixes ? `<span class="pill good" title="${esc(`Was counted as spending (“${t.fixesWhat}”) — will be moved`)}">Fixes old import</span>` : `<span class="pill good">Money in</span>`);
+  if (t.skip) flags.push(`<span class="pill" title="${esc(t.skip)}">${esc(/card/i.test(t.skip) ? "Card bill" : /own/i.test(t.skip) ? "Own transfer" : t.skip)}</span>`);
   if (t.dup) flags.push(`<span class="pill warn" title="${esc(t.dupOf ? `Looks like “${t.dupOf}”, already in Palli` : "Already in Palli")}">${I.copy}Already added?</span>`);
   if (t.person && t.dir === "out" && !t.skip) flags.push(t.knownPerson || t.cat !== "other" ? `<span class="pill">Person</span>` : `<button type="button" class="pill ask" data-who="${i}">Who is this?</button>`);
   return `<li class="erow imp-row${t.on ? " sel" : ""}${t.dir === "in" ? " in" : ""}" data-ix="${i}" role="checkbox" aria-checked="${t.on}" tabindex="0">
@@ -206,14 +207,15 @@ export async function importClick(ev) {
   const wi = t.closest("[data-who]")?.dataset.who;
   if (wi != null) { whoSheet(+wi); return true; }
   if (a === "restart") { if (IM.inbox && !await confirmBox({ title: "Start over?", text: "The forwarded alerts stay in your inbox for later.", ok: "Start over" })) return true; reset(); St.emit(); scrollTo(0, 0); return true; }
-  if (a === "all" || a === "none") { visible().forEach(({ t }) => { t.on = a === "all" ? t.dir === "out" && !t.skip && !t.dup : false; }); St.emit(); return true; }
+  if (a === "all" || a === "none") { visible().forEach(({ t }) => { t.on = a === "all" ? !t.skip && !t.dup : false; }); St.emit(); return true; }
   if (a === "add") { addSelected(); return true; }
   const rg = t.closest("[data-range]")?.dataset.range;
   if (rg) { IM.range = rg; St.emit(); return true; }
   const ci = t.closest("[data-cat]")?.dataset.cat;
   if (ci != null) {
-    const r = IM.rows[+ci], v = await pickCategory({ value: r.cat, title: r.merchant });
-    if (v && v !== r.cat) { const k = norm(r.merchant), same = IM.rows.filter(x => norm(x.merchant) === k); same.forEach(x => { x.cat = v; x.learn = true; }); if (same.length > 1) toast(`Changed all ${same.length} from ${r.merchant}`); St.emit(); }
+    const r = IM.rows[+ci], v = r.dir === "in" ? await pickList({ title: `${r.merchant} — money in`, value: r.cat, options: INCATS.map(c => ({ value: c.id, label: c.name, icon: c.emoji })) }) : await pickCategory({ value: r.cat, title: r.merchant });
+    if (v && v !== r.cat && r.dir === "in") { r.cat = v; St.emit(); }
+    else if (v && v !== r.cat) { const k = norm(r.merchant), same = IM.rows.filter(x => norm(x.merchant) === k); same.forEach(x => { x.cat = v; x.learn = true; }); if (same.length > 1) toast(`Changed all ${same.length} from ${r.merchant}`); St.emit(); }
     return true;
   }
   const ri = t.closest("[data-ren]")?.dataset.ren;
@@ -248,24 +250,35 @@ function pickFile() {
 function addSelected() {
   const pick = visible().filter(x => x.t.on).map(x => x.t);
   if (!pick.length) return;
+  const fixed = [];
   const recs = pick.map(t => {
+    if (t.dir === "in") {
+      if (t.fixes && St.get(t.fixes)) { fixed.push(t.fixes); return null; }
+      const e = St.newIncome({ date: t.date, what: t.merchant, amount: t.amount, cat: t.cat });
+      e.src = { from: t.source, ...(t.ref ? { ref: t.ref } : {}), text: t.desc.slice(0, 160) };
+      return e;
+    }
     const e = St.newExpense({ date: t.date, what: t.merchant, amount: t.amount, cat: t.cat });
     if (t.pay) e.pay = t.pay;
     if (t.person) { e.toPerson = true; if (t.cat === "other") e.ask = true; }
     e.src = { from: t.source, ...(t.ref ? { ref: t.ref } : {}), text: t.desc.slice(0, 160) };
     return e;
-  });
+  }).filter(Boolean);
   const learned = new Map(); pick.filter(t => t.learn).forEach(t => learned.set(t.merchant, t.cat));
   learned.forEach((c, m) => St.learn(m, c));
   pick.filter(t => t.renamed && t.orig).forEach(t => St.rememberPerson(t.orig, { name: t.merchant }));
-  St.saveMany(recs);
+  if (recs.length) St.saveMany(recs);
+  const fixedCats = new Map(pick.filter(t => t.fixes).map(t => [t.fixes, t]));
+  fixed.forEach(id => { const t = fixedCats.get(id); St.toIncome(id, t.cat); St.update(id, { what: t.merchant }, { log: false }); });
   // only the alerts you actually reviewed (rows in the period on screen) leave the inbox; undo brings them back
   const seen = IM.inbox ? [...new Set(visible().map(x => x.t.inboxId).filter(Boolean))] : [];
   const undoInbox = St.clearInbox(seen, 6500);
-  const ids = recs.map(r => r.id), n = recs.length, tot = recs.reduce((s, r) => s + r.amount, 0), asks = recs.filter(r => r.ask).length;
+  const ids = recs.map(r => r.id), outs = recs.filter(r => r.kind === "expense"), ins = recs.filter(r => r.kind === "income").length + fixed.length;
+  const tot = outs.reduce((s, r) => s + r.amount, 0), asks = recs.filter(r => r.ask).length;
   reset(); IM.sms = "";
-  go(asks ? "#/people" : "#/spend");
-  toast(`Added ${plural(n, "expense")} · ${money(tot)}`, () => { undoInbox(); St.saveMany(ids.map(St.get).filter(Boolean).map(e => ({ ...e, deleted: true }))); });
+  go(asks ? "#/people" : outs.length ? "#/spend" : "#/income");
+  const msg = [outs.length && `${plural(outs.length, "expense")} · ${money(tot)}`, ins && `${ins} money in`].filter(Boolean).join(" + ");
+  toast(`Added ${msg}${fixed.length ? ` (fixed ${fixed.length} old)` : ""}`, () => { undoInbox(); St.saveMany(ids.map(St.get).filter(Boolean).map(e => ({ ...e, deleted: true }))); fixed.forEach(id => St.toExpense(id)); });
 }
 
 // ---------- automatic alerts ----------

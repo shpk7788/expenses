@@ -67,6 +67,7 @@ export const wipeSpace = (space) => ["items", "dirty", "imgUp", "imgDel", "curso
 export const get = (id) => S.items.find(e => e.id === id);
 const liveKind = (k) => S.items.filter(e => !e.deleted && e.kind === k);
 export const expenses = () => liveKind("expense");
+export const incomes = () => liveKind("income");
 export const reports = () => liveKind("report").sort((a, b) => (b.created || 0) - (a.created || 0));
 export const settles = () => liveKind("settle");
 /** What this expense costs *me* (my share of a split, 0 while still scanning) */
@@ -163,7 +164,7 @@ export function nextDue(e) {
 export function runRecurring() {
   const t = today(), add = [];
   for (const e of S.items) {
-    if (e.kind !== "expense" || e.deleted || !e.repeat || e.split) continue;
+    if ((e.kind !== "expense" && e.kind !== "income") || e.deleted || !e.repeat || e.split) continue;
     const skip = new Set(e.repeat.skip || []);
     for (let k = 1; k <= 400; k++) {
       const d = stepDate(e.date, e.repeat.every, k);
@@ -171,13 +172,29 @@ export function runRecurring() {
       if (skip.has(d)) continue;
       const id = seededId(`${e.id}|${d}`);
       if (get(id)) continue;
-      const n = { id, kind: "expense", type: "manual", date: d, what: e.what, amount: e.amount, cat: e.cat, created: Date.now(), comments: [], recOf: e.id };
+      const n = { id, kind: e.kind, type: "manual", date: d, what: e.what, amount: e.amount, cat: e.cat, created: Date.now(), comments: [], recOf: e.id };
       for (const f of ["pay", "note", "tags", "place", "reimb", "orig"]) if (e[f] !== undefined) n[f] = JSON.parse(JSON.stringify(e[f]));
       add.push(n);
     }
   }
   if (add.length) saveMany(add);
   return add.length;
+}
+/** Money in ⇄ spending (fixes a payment that was recorded the wrong way round) */
+export function toIncome(id, cat) {
+  const e = get(id); if (!e || e.split) return null;
+  const n = { ...e, kind: "income", cat: cat || "other", wasExpense: true };
+  for (const k of ["reportId", "reimb", "receipt", "place", "distance", "status", "ask", "toPerson", "notDup"]) delete n[k];
+  return save(n);
+}
+export function toExpense(id) {
+  const e = get(id); if (!e) return null;
+  const n = { ...e, kind: "expense", type: e.type || "manual", cat: catFor(e.what, prefs().rules) };
+  delete n.wasExpense;
+  return save(n);
+}
+export function newIncome(fields = {}) {
+  return { id: uuid(), kind: "income", type: "manual", date: today(), what: "", amount: 0, cat: "other", created: Date.now(), ...fields };
 }
 export function restore(copy) {
   const { _children, ...rec } = copy;

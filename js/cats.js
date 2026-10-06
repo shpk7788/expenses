@@ -12,6 +12,23 @@ export const CATS = [
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const cat = (id) => CAT[id] || CAT.other;
 
+// money in
+export const INCATS = [
+  ["salary", "Salary", "💼", "#16a34a"], ["person", "From someone", "🤝", "#0ea5e9"], ["refund", "Refund", "↩️", "#64748b"],
+  ["cashback", "Cashback & rewards", "🎁", "#d946ef"], ["interest", "Interest", "🏦", "#0891b2"], ["business", "Business & freelance", "🧑‍💻", "#6366f1"],
+  ["sale", "Sold something", "🏷️", "#f59e0b"], ["other", "Other income", "💰", "#ca8a04"],
+].map(([id, name, emoji, color]) => ({ id, name, emoji, color }));
+export const INCAT = Object.fromEntries(INCATS.map(c => [c.id, c]));
+export const incat = (id) => INCAT[id] || INCAT.other;
+/** Best guess for money coming in */
+export function incomeCatFor(text, person = false) {
+  if (/salary|\bsal\b|payroll|stipend|wages/i.test(text)) return "salary";
+  if (/refund|reversal|reversed|returned/i.test(text)) return "refund";
+  if (/cashback|cash back|reward|scratch ?card|bonus points/i.test(text)) return "cashback";
+  if (/interest|\bint\.? ?(pd|cr|paid)\b|dividend/i.test(text)) return "interest";
+  return person ? "person" : "other";
+}
+
 export const PAYS = ["UPI", "Card", "Cash", "Net banking", "Wallet"];
 
 // ECB-backed (auto rate) currencies first, then manual-rate ones
