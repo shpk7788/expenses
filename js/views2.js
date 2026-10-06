@@ -5,7 +5,7 @@ import * as St from "./store.js";
 import { Api } from "./api.js";
 import { sheet, toast, go, confirmBox, promptBox, pickList, groupedHtml, hydrateThumbs, rowHtml } from "./ui.js";
 import { newReport, openSplit, openSettle, openCreate } from "./create.js";
-import { top, exportCsv, editBudget } from "./views.js";
+import { top, exportCsv, editBudget, pickPeriod } from "./views.js";
 import { imgUrl } from "./media.js";
 
 const STATUS = { open: "Open", submitted: "Submitted", reimbursed: "Reimbursed" };
@@ -148,7 +148,8 @@ export function account() {
     ${S.noBucket ? `<div class="note-box warn" style="margin-bottom:12px"><b>Receipt photos aren't backing up yet.</b> Your expenses sync fine, but photos stay on this device until receipt storage is set up in Supabase (run the storage part of <code>supabase/schema.sql</code>).</div>` : ""}
     <div class="sec-h">Preferences</div>
     <div class="card" style="padding:2px 14px"><div class="set-list">
-      ${row("budget", I.wallet, "Budgets", P.budget ? "₹" + P.budget.toLocaleString("en-IN") : Object.keys(P.catBudgets).length ? plural(Object.keys(P.catBudgets).length, "category") : "Not set", Object.keys(P.catBudgets).length && P.budget ? plural(Object.keys(P.catBudgets).length, "category budget") : "Monthly total and per category")}
+      ${row("budget", I.wallet, "Budgets", P.budget ? "₹" + P.budget.toLocaleString("en-IN") : Object.keys(P.catBudgets).length ? plural(Object.keys(P.catBudgets).length, "category") : "Not set", Object.keys(P.catBudgets).length && P.budget ? plural(Object.keys(P.catBudgets).length, "category budget") : `Total and per category, ${St.period().per}`)}
+      ${row("period", I.cal, "Budget period", esc(St.PERIODS[St.period().kind] || "Monthly"), "What the Home card counts: day, week, month, year…")}
       ${row("currency", I.globe, "Default currency", esc(P.currency), "Converted to ₹ automatically")}
       ${row("upi", I.upi, "Your UPI ID", esc(P.upi || "Not set"), "For split payment requests")}
       ${row("name", I.user2, "Your name", esc(P.name || (u?.username ?? "Not set")), "On UPI requests and PDFs")}
@@ -164,7 +165,7 @@ export function account() {
       ${u ? row("alerts", I.bell, "Automatic bank alerts", "", "Forward payment SMS to Palli") : ""}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Palli · v10.0</p>`;
+    <p class="ver">Palli · v10.1</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
@@ -172,6 +173,7 @@ export async function accountClick(ev) {
   if (k === "sync") { await St.syncNow(); for (let i = 0; i < 100 && St.S.state === "busy"; i++) await new Promise(r => setTimeout(r, 150)); toast(St.S.state === "ok" ? "Synced" : St.S.err || "Couldn't sync — will retry"); }
   else if (k === "signin") { LS.del("exp:guestMode"); window.dispatchEvent(new Event("app:auth")); }
   else if (k === "budget") editBudget();
+  else if (k === "period") pickPeriod();
   else if (k === "currency") { const v = await pickList({ title: "Default currency", value: P.currency, search: true, options: CURRENCIES.map(c => ({ value: c, label: c, sub: CUR_NAMES[c] })) }); if (v) St.setPrefs({ currency: v }); }
   else if (k === "upi") { const v = await promptBox({ title: "Your UPI ID", label: "e.g. name@okaxis", value: P.upi, placeholder: "yourname@bank" }); if (v !== null) { if (v.trim() && !/^[\w.\-]{2,}@[a-z]{2,}$/i.test(v.trim())) toast("That doesn't look like a UPI ID (name@bank)"); else St.setPrefs({ upi: v.trim() }); } }
   else if (k === "name") { const v = await promptBox({ title: "Your name", value: P.name || Api.user?.username || "" }); if (v !== null) St.setPrefs({ name: v.trim() }); }

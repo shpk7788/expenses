@@ -1,5 +1,5 @@
 // App state: records (expenses, reports, settlements), prefs, sync engine.
-import { LS, norm, r2, uuid, today, money, addDays, addMonths, diffDays } from "./util.js";
+import { LS, norm, r2, uuid, today, money, addDays, addMonths, diffDays, weekStart, monthStart, monthEnd, daysIn, parse, ymd, dShort, MONTHS } from "./util.js";
 import { Api } from "./api.js";
 import { catFor, cat } from "./cats.js";
 import { Img, forgetUrl } from "./media.js";
@@ -227,7 +227,7 @@ export async function getImage(id) {
 }
 
 // ---------- prefs (synced via account metadata for signed-in users) ----------
-const PREF_DEFAULTS = { budget: 0, catBudgets: {}, currency: "INR", upi: "", name: "", rates: { car: 10, bike: 4 }, rules: {}, people: {}, theme: "system", saved: [] };
+const PREF_DEFAULTS = { budget: 0, catBudgets: {}, currency: "INR", upi: "", name: "", rates: { car: 10, bike: 4 }, rules: {}, people: {}, theme: "system", saved: [], period: { kind: "month" } };
 export function prefs() {
   const raw = Api.user ? (Api.user.meta || {}) : LS.get(K("settings", "guest"), {});
   return { ...PREF_DEFAULTS, ...raw, rates: { ...PREF_DEFAULTS.rates, ...(raw.rates || {}) }, rules: raw.rules || {}, people: raw.people || {}, catBudgets: raw.catBudgets || {} };
@@ -259,6 +259,28 @@ export function setPrefs(patch) {
   if ("theme" in patch) applyTheme();
   emit();
 }
+// ---------- budget period (what the Home card and budgets measure) ----------
+export const PERIODS = { day: "Daily", week: "Weekly", month: "Monthly", year: "Yearly", cycle: "Pay cycle", custom: "Custom dates" };
+/** { from, to, label, per, name, daysLeft } for the chosen period, containing `t` */
+export function period(p = prefs().period, t = today()) {
+  const k = p?.kind || "month";
+  let from, to, label, per, name;
+  if (k === "day") { from = to = t; label = "Spent today"; per = "for today"; name = "today"; }
+  else if (k === "week") { from = weekStart(t); to = addDays(from, 6); label = "Spent this week"; per = "per week"; name = "this week"; }
+  else if (k === "year") { from = `${t.slice(0, 4)}-01-01`; to = `${t.slice(0, 4)}-12-31`; label = `Spent in ${t.slice(0, 4)}`; per = "per year"; name = "this year"; }
+  else if (k === "cycle") {
+    const day = Math.min(28, Math.max(1, +p.start || 1)), d = parse(t);
+    const at = (y, m) => ymd(new Date(y, m, Math.min(day, daysIn(y, m))));
+    from = d.getDate() >= day ? at(d.getFullYear(), d.getMonth()) : at(d.getFullYear(), d.getMonth() - 1);
+    const f = parse(from); to = addDays(at(f.getFullYear(), f.getMonth() + 1), -1);
+    label = `Spent since ${dShort(from)}`; per = "per pay cycle"; name = "this cycle";
+  } else if (k === "custom" && p.from && p.to && p.from <= p.to) {
+    from = p.from; to = p.to; label = `Spent ${dShort(from)} – ${dShort(to)}`; per = "for these dates"; name = "these dates";
+  } else { from = monthStart(t); to = monthEnd(t); label = `Spent in ${MONTHS[parse(t).getMonth()]}`; per = "per month"; name = "this month"; }
+  const daysLeft = Math.max(0, diffDays(t > from ? t : from, to) + 1);
+  return { kind: k, from, to, label, per, name, daysLeft, inRange: (d) => d >= from && d <= to };
+}
+
 /** Remember the category a person picks for a merchant, so next time it's automatic */
 export function learn(merchant, catId) {
   const n = norm(merchant); if (!n) return;

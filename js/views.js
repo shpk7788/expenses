@@ -17,21 +17,23 @@ export const top = (title, { back, right = "" } = {}) => `<header class="top">${
 
 // =============== HOME ===============
 export function home() {
-  const all = St.expenses(), t = today(), m = t.slice(0, 7), P = St.prefs();
-  const month = all.filter(e => e.date.startsWith(m)).reduce((s, e) => s + St.mine(e), 0);
+  const all = St.expenses(), t = today(), P = St.prefs(), per = St.period();
+  const inP = (e) => per.inRange(e.date);
+  const month = all.filter(inP).reduce((s, e) => s + St.mine(e), 0);
   const todayTot = all.filter(e => e.date === t).reduce((s, e) => s + St.mine(e), 0);
-  const inMonth = St.incomes().filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0);
-  const officeMonth = all.filter(e => e.date.startsWith(m) && St.isOffice(e)).reduce((s, e) => s + St.spendOf(e), 0);
-  const d0 = new Date(), daysLeft = daysIn(d0.getFullYear(), d0.getMonth()) - d0.getDate() + 1;
+  const monthTot = all.filter(e => e.date.startsWith(t.slice(0, 7))).reduce((s, e) => s + St.mine(e), 0);
+  const inMonth = St.incomes().filter(inP).reduce((s, e) => s + e.amount, 0);
+  const officeMonth = all.filter(e => inP(e) && St.isOffice(e)).reduce((s, e) => s + St.spendOf(e), 0);
+  const daysLeft = Math.max(1, per.daysLeft);
   let budget = "";
   if (P.budget > 0) {
     const left = P.budget - month, pct = Math.min(100, month / P.budget * 100);
-    budget = `<div class="hbar${left < 0 ? " over" : pct > 85 ? " warn" : ""}" role="progressbar" aria-label="Monthly budget used" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="--w:${pct}%"></i></div>
-      <div class="hero-foot">${left >= 0 ? `<span><b>${moneyBig(left)}</b> left of ${moneyBig(P.budget)}</span><span><b>${moneyBig(Math.floor(left / daysLeft))}</b>/day for ${plural(daysLeft, "day")}</span>`
+    budget = `<div class="hbar${left < 0 ? " over" : pct > 85 ? " warn" : ""}" role="progressbar" aria-label="Budget used ${per.name}" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="--w:${pct}%"></i></div>
+      <div class="hero-foot">${left >= 0 ? `<span><b>${moneyBig(left)}</b> left of ${moneyBig(P.budget)}</span>${per.kind !== "day" && daysLeft > 1 ? `<span><b>${moneyBig(Math.floor(left / daysLeft))}</b>/day for ${plural(daysLeft, "day")}</span>` : ""}`
         : `<span><b>${moneyBig(-left)}</b> over your ${moneyBig(P.budget)} budget</span>`}</div>`;
-  } else budget = `<button type="button" class="hero-link" data-act="budget">${I.plus}Set a monthly budget</button>`;
+  }
   // per-category budgets
-  const catSpent = {}; all.filter(e => e.date.startsWith(m)).forEach(e => catSpent[e.cat] = (catSpent[e.cat] || 0) + St.mine(e));
+  const catSpent = {}; all.filter(inP).forEach(e => catSpent[e.cat] = (catSpent[e.cat] || 0) + St.mine(e));
   const cb = Object.entries(P.catBudgets || {}).filter(([, v]) => v > 0);
   const budgetRows = cb.map(([id, lim]) => ({ id, lim, spent: catSpent[id] || 0, pct: (catSpent[id] || 0) / lim * 100 })).sort((a, b) => b.pct - a.pct);
   // to-dos
@@ -48,7 +50,7 @@ export function home() {
     if (claim > 0) todo.push({ ic: I.folder, cls: r.status === "submitted" ? "good" : "", t: r.status === "submitted" ? `Waiting on ${money(claim)}` : `${money(claim)} to claim`, s: `Report · ${r.name}`, go: `#/report/${r.id}` });
   }
   for (const b of budgetRows) {
-    if (b.pct > 100) todo.push({ ic: I.alert, cls: "bad", t: `${cat(b.id).name} is ${money(b.spent - b.lim)} over budget`, s: `${money(b.spent)} of ${money(b.lim)} this month`, go: "#/spend?v=insights" });
+    if (b.pct > 100) todo.push({ ic: I.alert, cls: "bad", t: `${cat(b.id).name} is ${money(b.spent - b.lim)} over budget`, s: `${money(b.spent)} of ${money(b.lim)} ${per.name}`, go: "#/spend?v=insights" });
     else if (b.pct >= 85) todo.push({ ic: I.alert, t: `${cat(b.id).name}: ${Math.round(b.pct)}% of budget used`, s: `${money(b.lim - b.spent)} left for ${plural(daysLeft, "day")}`, go: "#/spend?v=insights" });
   }
   const asks = all.filter(e => e.ask).length;
@@ -59,12 +61,11 @@ export function home() {
   for (const r of all.filter(e => e.repeat)) { const d = St.nextDue(r), n = d && diffDays(t, d); if (n != null && n <= 3) todo.push({ ic: I.repeat, t: `${r.what} · ${money(r.amount)} ${n === 1 ? "tomorrow" : n === 0 ? "today" : `in ${n} days`}`, s: `Repeats ${St.REPEATS[r.repeat.every].toLowerCase()} — added automatically on ${dShort(d)}`, go: `#/expense/${r.id}` }); }
   if (St.S.noBucket) todo.push({ ic: I.image, t: "Receipt photos aren't backing up", s: "One more setup step — tap to see how", go: "#/account" });
   const recent = [...all].sort((a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0)).slice(0, 5);
-  const topCats = Object.entries(catSpent).filter(([id, v]) => v > 0 && !(P.catBudgets || {})[id]).sort((a, b) => b[1] - a[1]).slice(0, budgetRows.length ? 3 : 4);
   const hi = Api.user ? `Hi, ${esc(Api.user.username)}` : "Home";
 
   $("view").innerHTML = top(hi, { right: syncPill() }) + `
-    <section class="hero-card" aria-label="This month"><span class="hero-gecko" aria-hidden="true">${LOGO}</span>
-      <div class="hero-top"><span>Spent in ${MONTHS[new Date().getMonth()]}</span><span class="hero-pill">Today <b>${moneyBig(todayTot)}</b></span></div>
+    <section class="hero-card" aria-label="${esc(per.label)}"><span class="hero-gecko" aria-hidden="true">${LOGO}</span>
+      <div class="hero-top"><span>${esc(per.label)}</span><span class="hero-pill">${per.kind === "day" ? `${MONTHS[new Date().getMonth()].slice(0, 3)} <b>${moneyBig(monthTot)}</b>` : `Today <b>${moneyBig(todayTot)}</b>`}</span></div>
       <div class="hero-big num" data-count="${month}">${moneyHero(month)}</div>
       ${budget}
       ${inMonth ? `<button type="button" class="hero-in" data-go="#/income"><span>Received <b>+${moneyBig(inMonth)}</b></span><span>${inMonth >= month ? `<b>${moneyBig(inMonth - month)}</b> left` : `<b>${moneyBig(month - inMonth)}</b> over`}</span>${I.right}</button>` : ""}
@@ -77,13 +78,9 @@ export function home() {
     <div class="sec-h">To-do</div>
     <div class="todo">${todo.length ? todo.map(x => `<button type="button" data-go="${x.go}"><span class="ti ${x.cls || ""}">${x.ic}</span><span><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span><span class="chev">${I.right}</span></button>`).join("")
       : `<button type="button" style="cursor:default" tabindex="-1"><span class="ti good">${I.check}</span><span><b>You're all caught up</b><small>Nothing needs your attention</small></span><span></span></button>`}</div>
-    ${budgetRows.length ? `<div class="sec-h">Budgets<button type="button" data-act="budget">Edit</button></div><div class="card"><div class="brk">${budgetRows.map(b => { const c = cat(b.id), left = b.lim - b.spent; return `
+    ${budgetRows.length ? `<div class="sec-h">Budgets ${esc(per.name)}<button type="button" data-act="budget">Edit</button></div><div class="card"><div class="brk">${budgetRows.map(b => { const c = cat(b.id), left = b.lim - b.spent; return `
       <div class="brk-row"><div class="cat-ico" style="background:${c.color}22">${c.emoji}</div><div style="min-width:0"><div class="t"><span>${esc(c.name)}</span><span class="${b.pct > 100 ? "bal-neg" : ""}">${left >= 0 ? `${moneyBig(left)} left` : `${moneyBig(-left)} over`}</span></div>
       <div class="bar ${b.pct > 100 ? "over" : b.pct >= 85 ? "warn" : ""}"><i style="--w:${Math.min(100, b.pct).toFixed(1)}%"></i></div><div class="sub">${moneyBig(b.spent)} of ${moneyBig(b.lim)}</div></div></div>`; }).join("")}</div></div>` : ""}
-    ${topCats.length ? `<div class="sec-h">${budgetRows.length ? "Other spending" : "Where it went"}<button type="button" data-go="#/spend?v=insights">Insights</button></div><div class="card"><div class="brk">${topCats.map(([id, v]) => { const c = cat(id); return `
-      <div class="brk-row"><div class="cat-ico" style="background:${c.color}22">${c.emoji}</div><div style="min-width:0"><div class="t"><span>${esc(c.name)}</span><span>${Math.round(v / Math.max(month, 1) * 100)}% of spending</span></div>
-      <div class="bar share"><i style="--w:${(v / Math.max(month, 1) * 100).toFixed(1)}%;background:${c.color}"></i></div></div><div class="amt">${moneyBig(v)}</div></div>`; }).join("")}</div>
-      ${budgetRows.length ? "" : `<button type="button" class="link" data-act="budget" style="margin-top:10px">${I.plus}Set budgets for categories</button>`}</div>` : ""}
     <div class="sec-h">Recent<button type="button" data-go="#/spend">See all</button></div>
     ${recent.length ? `<div class="group"><ul class="rows">${recent.map(e => rowHtml(e, { dupes, showDate: true })).join("")}</ul></div>`
       : `<div class="card empty"><b>Nothing here yet</b>Tap Spent when you pay for something, or import a bank or Google Pay statement.<br><button type="button" class="btn secondary" data-go="#/import">${I.upload}Import a statement</button></div>`}`;
@@ -97,12 +94,13 @@ export function homeClick(ev) {
 }
 /** Budgets: one overall monthly limit + optional limits per category */
 export async function editBudget() {
-  const P = St.prefs(), m = today().slice(0, 7), spent = {};
-  St.expenses().filter(e => e.date.startsWith(m)).forEach(e => spent[e.cat] = (spent[e.cat] || 0) + St.mine(e));
+  const P = St.prefs(), per = St.period(), spent = {};
+  St.expenses().filter(e => per.inRange(e.date)).forEach(e => spent[e.cat] = (spent[e.cat] || 0) + St.mine(e));
   const { CATS: list } = await import("./cats.js");
   const order = [...list].sort((a, b) => (spent[b.id] || 0) - (spent[a.id] || 0));
-  const s = sheet({ title: "Budgets", sub: "Monthly limits. Leave blank for no limit.", body: `
-    <label class="field"><span>Total for the month</span><div class="money"><input id="bAll" type="number" inputmode="numeric" min="0" step="500" value="${P.budget || ""}" placeholder="e.g. 40000"></div></label>
+  const s = sheet({ title: "Budgets", sub: `Limits ${per.per}. Leave blank for no limit.`, body: `
+    <button type="button" class="per-row" id="bPer"><span>Budget period</span><b>${esc(St.PERIODS[per.kind] || "Monthly")}${per.kind === "cycle" || per.kind === "custom" ? ` · ${dShort(per.from)} – ${dShort(per.to)}` : ""}</b>${I.right}</button>
+    <label class="field"><span>Total ${per.per}</span><div class="money"><input id="bAll" type="number" inputmode="numeric" min="0" step="500" value="${P.budget || ""}" placeholder="e.g. 40000"></div></label>
     <div class="sec-h" style="margin:4px 0 -4px">By category</div>
     <div class="bud-list">${order.map(c => `<label class="bud-row"><span class="cat-ico" style="background:${c.color}22">${c.emoji}</span><span class="bud-n">${esc(c.name)}<small>${spent[c.id] ? `${moneyBig(spent[c.id])} so far` : "Nothing yet"}</small></span>
       <span class="money"><input type="number" inputmode="numeric" min="0" step="100" data-cb="${c.id}" value="${(P.catBudgets || {})[c.id] || ""}" placeholder="—" aria-label="${esc(c.name)} budget"></span></label>`).join("")}</div>
@@ -111,11 +109,43 @@ export async function editBudget() {
   const sum = () => { const t = [...s.el.querySelectorAll("[data-cb]")].reduce((a, i) => a + (parseFloat(i.value) || 0), 0), all = parseFloat(s.el.querySelector("#bAll").value) || 0;
     s.el.querySelector("#bSum").textContent = t ? `Category budgets add up to ${moneyBig(t)}${all && t > all ? ` — more than your ${moneyBig(all)} total` : ""}.` : ""; };
   s.body.addEventListener("input", sum); sum();
+  s.el.querySelector("#bPer").onclick = async () => { s.close(); const { whenSettled } = await import("./ui.js"); whenSettled(async () => { if (await pickPeriod()) editBudget(); }); };
   s.el.querySelector("#bOk").onclick = () => {
     const cbs = {}; s.el.querySelectorAll("[data-cb]").forEach(i => { const v = Math.round(parseFloat(i.value)); if (v > 0) cbs[i.dataset.cb] = v; });
     const all = Math.round(parseFloat(s.el.querySelector("#bAll").value)) || 0;
     St.setPrefs({ budget: all > 0 ? all : 0, catBudgets: cbs }); s.close(); toast("Budgets saved");
   };
+}
+
+/** Settings: what time frame the Home card and budgets use */
+export async function pickPeriod() {
+  const P = St.prefs(), cur = P.period?.kind || "month";
+  const v = await pickList({ title: "Budget period", value: cur, options: [
+    { value: "day", label: "Daily", sub: "Today's spending vs a daily budget" }, { value: "week", label: "Weekly", sub: "Monday to Sunday" },
+    { value: "month", label: "Monthly", sub: "1st to end of month (default)" }, { value: "year", label: "Yearly", sub: "January to December" },
+    { value: "cycle", label: "Pay cycle", sub: "A month that starts on your payday, e.g. 25th to 24th" }, { value: "custom", label: "Custom dates", sub: "Any start and end date, e.g. a trip" }] });
+  if (!v) return false;
+  if (v === "cycle") {
+    const { promptBox } = await import("./ui.js");
+    const d = await promptBox({ title: "Pay cycle starts on", label: "Day of the month (1–28)", value: String(P.period?.start || 1), type: "number", inputmode: "numeric" });
+    if (d === null) return false;
+    const n = Math.round(+d); if (!(n >= 1 && n <= 28)) { toast("Pick a day from 1 to 28"); return false; }
+    St.setPrefs({ period: { kind: "cycle", start: n } });
+  } else if (v === "custom") {
+    const r = await pickDates(P.period?.kind === "custom" ? P.period : { from: today(), to: addDays(today(), 13) });
+    if (!r) return false;
+    St.setPrefs({ period: { kind: "custom", ...r } });
+  } else St.setPrefs({ period: { kind: v } });
+  toast(`Budget period: ${St.period().label.replace(/^Spent /, "")}`);
+  return true;
+}
+function pickDates({ from, to }) {
+  return new Promise(res => {
+    let val = null;
+    const s = sheet({ title: "Custom dates", body: `<div class="row2"><label class="field"><span>From</span><input type="date" id="pdFrom" value="${esc(from)}"></label><label class="field"><span>To</span><input type="date" id="pdTo" value="${esc(to)}"></label></div><p class="err" id="pdErr"></p>`,
+      foot: `<button type="button" class="btn primary" id="pdOk">Use these dates</button>`, onClose: () => res(val) });
+    s.el.querySelector("#pdOk").onclick = () => { const f = s.el.querySelector("#pdFrom").value, t = s.el.querySelector("#pdTo").value; if (!f || !t || f > t) { s.el.querySelector("#pdErr").textContent = "The end date must be on or after the start date."; return; } val = { from: f, to: t }; s.close(); };
+  });
 }
 
 // =============== SPEND ===============

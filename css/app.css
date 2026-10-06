@@ -662,3 +662,5 @@ code { background: var(--field); border-radius: 6px; padding: 1px 5px; font-size
 .chk-list .erow { grid-template-columns: 22px minmax(0, 1fr) auto; } .chk-list .erow .ck { display: grid; }
 .amount-in.in .in-sign { white-space: nowrap; flex: none; line-height: 1; }
 .in-sum b { font-size: clamp(.98rem, 4.4vw, 1.18rem); }
+.per-row { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--field); text-align: left; margin-bottom: 4px; }
+.per-row span { color: var(--muted); font-size: .88rem; } .per-row b { font-weight: 600; font-size: .92rem; } .per-row svg { width: 16px; height: 16px; color: var(--muted); }
