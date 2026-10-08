@@ -5,6 +5,7 @@ import * as St from "./store.js";
 import { sheet, toast, autocomplete, pickList, pickCategory, go, confirmBox, promptBox, whenSettled } from "./ui.js";
 import { Api } from "./api.js";
 import { compress, fxRate } from "./media.js";
+import { mountCurrency, startCur, rememberCur, sym } from "./currency.js";
 
 // ---------- + menu ----------
 export function openCreate(ctx = {}) {
@@ -75,6 +76,7 @@ const whatSource = (q) => { const h = historySource("what")(q); return [{ title:
 const placeSource = (q) => { const h = historySource("place")(q); return [{ title: "Your restaurants", opts: h.out }, { title: "Restaurants", opts: rankStores(q, { filter: s => FOOD_PLACE.has(s.label), exclude: h.taken }) }]; };
 const friends = () => { const set = new Map(); St.expenses().forEach(e => e.split?.shares.forEach(s => { if (!s.me) set.set(norm(s.name), s.name); })); St.settles().forEach(s => set.set(norm(s.with), s.with)); return [...set.values()]; };
 
+const isDistType = (t) => t === "distance";
 // ---------- expense form (create + edit) ----------
 export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   const ex = id ? St.get(id) : null;
@@ -84,7 +86,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   if (!e.reportId) delete e.reportId;
   if (!e.pay) delete e.pay;
   const isDist = e.type === "distance";
-  let cur = e.orig?.cur || (ex ? "INR" : P.currency || "INR"), rate = e.orig?.rate || null, catTouched = !!ex, catId = e.cat || "other";
+  let cur = e.orig?.cur || (ex ? "INR" : isDistType(type) ? "INR" : startCur(P.currency || "INR")), rate = e.orig?.rate || null, catTouched = !!ex, catId = e.cat || "other";
   const dist = e.distance || { from: "", to: "", km: "", vehicle: "car", rate: P.rates.car };
   const reportsOpen = St.reports().filter(r => r.status !== "reimbursed" || r.id === e.reportId);
   const title = ex ? (isDist ? "Edit distance" : "Edit expense") : isDist ? "Distance" : "Manual expense";
@@ -100,6 +102,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
       <label class="inline-row"><span>Round trip<small>Doubles the distance</small></span><span class="switch"><input type="checkbox" id="dRound" ${dist.round ? "checked" : ""}><i></i></span></label>` : ""}
     <div class="field"><div class="amount-in"><button type="button" class="cur-btn" id="fCur">${esc(cur)}${I.down}</button>
       <input id="fAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${esc(amtVal)}" aria-label="Amount" enterkeyhint="next"></div>
+      ${isDist ? "" : `<div class="chips cur-chips" id="fCurs"></div>`}
       <div class="conv" id="fConv" hidden></div></div>
     <div class="field"><label for="fWhat" class="sr">${isDist ? "Description" : "Merchant"}</label><div><input id="fWhat" value="${esc(e.what)}" placeholder="${isDist ? "What was the trip for?" : "Where? e.g. Swiggy, DMart, Rent"}" autocapitalize="words" enterkeyhint="done"></div></div>
     <div class="field" id="fPlaceF" hidden><label for="fPlace">Which restaurant?</label><div><input id="fPlace" value="${esc(e.place || "")}" placeholder="e.g. Meghana Foods" autocapitalize="words"></div></div>
@@ -149,7 +152,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
   $$("#fMore").onclick = () => setMore($$("#fMoreBox").hidden);
   s.body.addEventListener("change", moreSum); s.body.addEventListener("click", (ev) => { if (ev.target.closest("[data-pay]")) setTimeout(moreSum); });
   moreSum(); if (ex && (e.note || e.tags?.length || e.reportId || e.reimb)) setMore(true);
-  const saveLbl = () => { if (!ex) { const a = parseFloat(amt.value); $$("#fSave").textContent = a > 0 && cur === "INR" ? `Add ${money(a)}` : "Add expense"; } };
+  const saveLbl = () => { if (!ex) { const a = parseFloat(amt.value); $$("#fSave").textContent = a > 0 ? (cur === "INR" ? `Add ${money(a)}` : `Add ${sym(cur)}${+a.toFixed(2)}`) : "Add expense"; } };
   amt.addEventListener("input", saveLbl); saveLbl();
   what.addEventListener("input", () => { syncPlace(); autoCat(); });
   $$("#fCat").onclick = async (ev) => {
@@ -167,27 +170,9 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
     else sel.value = e.reportId || "";
   };
 
-  // currency
-  const conv = $$("#fConv");
-  const drawConv = async (fetchRate) => {
-    if (cur === "INR") { conv.hidden = true; return; }
-    conv.hidden = false;
-    if (fetchRate || !rate) {
-      conv.innerHTML = `<span>Getting the ${esc(cur)} → ₹ rate…</span>`;
-      const r = AUTO_FX.has(cur) ? await fxRate(cur, $$("#fDate").value || today()) : null;
-      if (r) rate = r;
-    }
-    const a = parseFloat(amt.value) || 0;
-    conv.innerHTML = `<span>≈ <b>${money(a * (rate || 0))}</b> at</span><input id="fRate" type="number" inputmode="decimal" step="0.0001" min="0" value="${rate ? +(+rate).toFixed(4) : ""}" placeholder="rate" aria-label="Exchange rate to rupees"><span>₹ per ${esc(cur)}${!rate ? " — enter the rate" : ""}</span>`;
-    $$("#fRate").oninput = (ev) => { rate = parseFloat(ev.target.value) || null; conv.querySelector("b").textContent = money((parseFloat(amt.value) || 0) * (rate || 0)); };
-  };
-  amt.addEventListener("input", () => { const b = conv.querySelector("b"); if (b) b.textContent = money((parseFloat(amt.value) || 0) * (rate || 0)); });
-  $$("#fDate").addEventListener("change", () => { if (cur !== "INR" && AUTO_FX.has(cur)) drawConv(true); });
-  $$("#fCur").onclick = async () => {
-    const v = await pickList({ title: "Currency", value: cur, search: true, options: CURRENCIES.map(c => ({ value: c, label: c, sub: CUR_NAMES[c] + (c !== "INR" && !AUTO_FX.has(c) ? " · enter rate yourself" : "") })) });
-    if (v && v !== cur) { cur = v; rate = null; $$("#fCur").innerHTML = `${esc(cur)}${I.down}`; drawConv(true); }
-  };
-  if (cur !== "INR") drawConv(false);
+  // currency: chips for the ones you use + auto rate to ₹
+  const curState = { cur, rate, def: P.currency || "INR" };
+  mountCurrency({ btn: $$("#fCur"), chips: $$("#fCurs"), conv: $$("#fConv"), amt, dateInput: $$("#fDate"), state: curState, onChange: (c, r) => { cur = c; rate = r; saveLbl(); } });
 
   // distance
   if (isDist) {
@@ -226,6 +211,7 @@ export function openForm({ id, type = "manual", date, focus, reportId } = {}) {
     if (ex && ex.status && patch.amount) patch.status = undefined; // reviewed
     if (catTouched) St.learn(patch.what, catId);
     if (payBtn) localStorage.setItem("exp:lastPay", payBtn.dataset.pay);
+    if (!isDist) rememberCur(cur, P.currency || "INR");
     if (ex) { St.update(ex.id, patch); toast("Saved"); }
     else { const n = { ...e, ...patch }; Object.keys(n).forEach(k => n[k] === undefined && delete n[k]); St.save(n); toast(n.repeat ? `Added · repeats ${St.REPEATS[n.repeat.every].toLowerCase()}` : "Expense added"); }
     if (patch.repeat) St.runRecurring();

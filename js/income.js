@@ -4,15 +4,18 @@ import { INCATS, incat, incomeCatFor } from "./cats.js";
 import * as St from "./store.js";
 import { sheet, toast, go, confirmBox, autocomplete } from "./ui.js";
 import { top } from "./views.js";
+import { mountCurrency, startCur, rememberCur, sym } from "./currency.js";
 
 /** Add or edit money in */
 export function openIncome({ id, date } = {}) {
   const ex = id ? St.get(id) : null;
   const e = ex ? JSON.parse(JSON.stringify(ex)) : St.newIncome({ date: date || today() });
   let catId = e.cat || "other", catTouched = !!ex;
+  const def = St.prefs().currency || "INR", curState = { cur: e.orig?.cur || (ex ? "INR" : startCur(def)), rate: e.orig?.rate || null, def };
   const s = sheet({ title: ex ? "Edit money in" : "Money received", cls: "form-sheet income-sheet", body: `
-    <div class="field"><div class="amount-in in"><span class="in-sign" aria-hidden="true">+₹</span>
-      <input id="iAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${esc(e.amount || "")}" aria-label="Amount received" enterkeyhint="next"></div></div>
+    <div class="field"><div class="amount-in in"><span class="in-sign" aria-hidden="true">+</span><button type="button" class="cur-btn" id="iCur"></button>
+      <input id="iAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${esc(e.orig ? e.orig.amt : e.amount || "")}" aria-label="Amount received" enterkeyhint="next"></div>
+      <div class="chips cur-chips" id="iCurs"></div><div class="conv" id="iConv" hidden></div></div>
     <div class="field"><label for="iWhat" class="sr">From</label><div><input id="iWhat" value="${esc(e.what)}" placeholder="From? e.g. Salary, Rahul, Amazon refund" autocapitalize="words" enterkeyhint="done"></div></div>
     <div class="field"><span>Type</span><div class="cat-quick" id="iCat">${INCATS.map(c => `<button type="button" class="chip" data-icat="${c.id}" aria-pressed="${c.id === catId}">${c.emoji} ${esc(c.name)}</button>`).join("")}</div></div>
     <div class="field"><span>Date</span><div class="chips wrap" id="iDates"><button type="button" class="chip" data-day="0">Today</button><button type="button" class="chip" data-day="-1">Yesterday</button>
@@ -32,14 +35,15 @@ export function openIncome({ id, date } = {}) {
     if (parseFloat(amt.value) > 0) q("#iSave").click(); else what.blur();
   });
   amt.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); what.focus(); } });
-  const lbl = () => { if (!ex) { const a = parseFloat(amt.value); q("#iSave").textContent = a > 0 ? `Add +${money(a)}` : "Add money in"; } };
+  const lbl = () => { if (!ex) { const a = parseFloat(amt.value); q("#iSave").textContent = a > 0 ? (curState.cur === "INR" ? `Add +${money(a)}` : `Add +${sym(curState.cur)}${+a.toFixed(2)}`) : "Add money in"; } };
+  mountCurrency({ btn: q("#iCur"), chips: q("#iCurs"), conv: q("#iConv"), amt, dateInput: q("#iDate"), state: curState, onChange: () => lbl() });
   amt.addEventListener("input", lbl);
   const drawDates = () => {
     const d = q("#iDate").value || today(), t = today(), y = addDays(t, -1);
     q("#iDates").querySelectorAll("[data-day]").forEach(b => b.setAttribute("aria-pressed", (b.dataset.day === "0" ? t : y) === d));
     const other = d !== t && d !== y; q("#iDateChip").setAttribute("aria-pressed", other); q("#iDateLbl").textContent = other ? dMed(d) : "Other date";
   };
-  q("#iDates").addEventListener("click", (ev) => { const b = ev.target.closest("[data-day]"); if (!b) return; q("#iDate").value = addDays(today(), +b.dataset.day); drawDates(); });
+  q("#iDates").addEventListener("click", (ev) => { const b = ev.target.closest("[data-day]"); if (!b) return; q("#iDate").value = addDays(today(), +b.dataset.day); q("#iDate").dispatchEvent(new Event("change")); });
   q("#iDate").addEventListener("change", drawDates); drawDates();
   q("#iRepeat").onclick = (ev) => { const b = ev.target.closest("[data-rep]"); if (!b) return; q("#iRepeat").querySelectorAll("[data-rep]").forEach(x => x.setAttribute("aria-pressed", x === b)); };
   q("#iSave").onclick = () => {
@@ -47,12 +51,15 @@ export function openIncome({ id, date } = {}) {
     if (!(a > 0)) { q("#iErr").textContent = "Enter the amount you received."; amt.focus(); return; }
     if (!w) { q("#iErr").textContent = "Add who or what it was from."; what.focus(); return; }
     const rep = q('[data-rep][aria-pressed="true"]')?.dataset.rep;
-    const n = { ...e, amount: r2(a), what: w, cat: catId, date: q("#iDate").value || today(), note: q("#iNote").value.trim() || undefined, repeat: rep ? { ...(e.repeat || {}), every: rep } : undefined };
+    if (curState.cur !== "INR" && !(curState.rate > 0)) { q("#iErr").textContent = `Enter the ${curState.cur} → ₹ exchange rate.`; q("#iConv .fx-rate")?.focus(); return; }
+    const inr = curState.cur === "INR";
+    rememberCur(curState.cur, def);
+    const n = { ...e, amount: inr ? r2(a) : r2(a * curState.rate), orig: inr ? undefined : { amt: r2(a), cur: curState.cur, rate: +curState.rate }, what: w, cat: catId, date: q("#iDate").value || today(), note: q("#iNote").value.trim() || undefined, repeat: rep ? { ...(e.repeat || {}), every: rep } : undefined };
     Object.keys(n).forEach(k => n[k] === undefined && delete n[k]);
     St.save(n);
     if (n.repeat) St.runRecurring();
     navigator.vibrate?.(8);
-    toast(ex ? "Saved" : `Added +${money(n.amount)} money in`);
+    toast(ex ? "Saved" : `Added +${money(n.amount)} money in${n.orig ? ` (${sym(n.orig.cur)}${n.orig.amt})` : ""}`);
     s.close();
   };
   q("#iDel")?.addEventListener("click", async () => {

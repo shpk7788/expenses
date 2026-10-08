@@ -4,7 +4,7 @@ import { norm } from "./util.js";
 export const CATS = [
   ["food", "Food & dining", "🍔", "#f97316"], ["groceries", "Groceries", "🛒", "#22c55e"], ["shopping", "Shopping", "🛍️", "#a855f7"],
   ["transport", "Transport", "🚕", "#3b82f6"], ["fuel", "Fuel", "⛽", "#ef4444"], ["bills", "Bills & utilities", "💡", "#eab308"],
-  ["rent", "Rent & EMI", "🏦", "#0ea5e9"], ["entertainment", "Entertainment", "🎬", "#ec4899"], ["health", "Health", "💊", "#14b8a6"],
+  ["rent", "Rent", "🔑", "#0ea5e9"], ["emi", "EMI & loans", "🏦", "#0369a1"], ["entertainment", "Entertainment", "🎬", "#ec4899"], ["health", "Health", "💊", "#14b8a6"],
   ["travel", "Travel", "✈️", "#06b6d4"], ["personal", "Personal care", "💇", "#f43f5e"], ["home", "Home", "🏠", "#84cc16"],
   ["education", "Education", "📚", "#6366f1"], ["gifts", "Gifts & donations", "🎁", "#d946ef"], ["services", "Services", "🧰", "#64748b"],
   ["other", "Other", "🧾", "#94a3b8"],
@@ -57,7 +57,8 @@ STORE_IDX.forEach(s => { if (s.label === "Food delivery") DELIVERY.add(s.n); });
 export const isDelivery = (m) => DELIVERY.has(norm(m));
 
 const KEYWORDS = [
-  ["rent", /\b(rent|emi|loan|mortgage|society|maintenance)\b/i],
+  ["emi", /\b(emi|loans?|mortgage|instal+ments?|home loan|car loan|bajaj finserv|credit card emi)\b/i],
+  ["rent", /\b(rent|society|maintenance|landlord)\b/i],
   ["bills", /\b(electric|electricity|water|gas|wifi|wi-fi|internet|broadband|recharge|bill|insurance|dth|postpaid|prepaid)\b/i],
   ["transport", /\b(uber|ola|auto|rickshaw|cab|taxi|metro|bus|train|parking|toll|rapido)\b/i],
   ["fuel", /\b(petrol|diesel|fuel|cng)\b/i],
@@ -78,6 +79,7 @@ export function catFor(merchant, rules = {}) {
   if (!n) return "other";
   if (rules[n] && CAT[rules[n]]) return rules[n];
   let s = STORE_BY.get(n);
+  if (!s) for (const [c, re] of KEYWORDS.slice(0, 3)) if (re.test(merchant)) return c;   // "Home loan EMI" is a loan, not the "Home" hotel brand
   if (!s) { // "Starbucks NYC", "DMart Koramangala" → longest known brand at the start
     const words = merchant.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
     for (let k = words.length - 1; k >= 1 && !s; k--) { const pre = norm(words.slice(0, k).join("")); if (pre.length >= 3) s = STORE_BY.get(pre); }

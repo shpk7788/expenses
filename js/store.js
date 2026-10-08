@@ -37,7 +37,15 @@ export function load() {
   S.lastSynced = LS.get(K("synced"), 0);
   S.noBucket = false;
   repairImports();
+  splitRentEmi();
   runRecurring();
+}
+/** Rent and EMI used to be one category: move loans/EMIs to their own, once */
+function splitRentEmi() {
+  if (LS.get(K("mig:emi"), false)) return;
+  const fix = S.items.filter(e => e.kind === "expense" && !e.deleted && e.cat === "rent" && /\b(emi|loans?|mortgage|instal+ments?)\b/i.test(`${e.what || ""} ${e.note || ""}`)).map(e => ({ ...e, cat: "emi" }));
+  LS.set(K("mig:emi"), true);
+  if (fix.length) setTimeout(() => saveMany(fix), 0);
 }
 /** One-time repair for rows imported before v9: names misread as brands ("Subash" → "Ba&sh"), and people payments to sort */
 function repairImports() {

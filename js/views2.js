@@ -165,7 +165,7 @@ export function account() {
       ${u ? row("alerts", I.bell, "Automatic bank alerts", "", "Forward payment SMS to Palli") : ""}
       ${u ? `<button type="button" class="set-row danger" data-set="logout">${I.logout}<span>Sign out</span><span></span></button>` : ""}
     </div></div>
-    <p class="ver">Palli · v10.1</p>`;
+    <p class="ver">Palli · v10.2</p>`;
 }
 export async function accountClick(ev) {
   const k = ev.target.closest("[data-set]")?.dataset.set; if (!k) return false;
@@ -174,7 +174,7 @@ export async function accountClick(ev) {
   else if (k === "signin") { LS.del("exp:guestMode"); window.dispatchEvent(new Event("app:auth")); }
   else if (k === "budget") editBudget();
   else if (k === "period") pickPeriod();
-  else if (k === "currency") { const v = await pickList({ title: "Default currency", value: P.currency, search: true, options: CURRENCIES.map(c => ({ value: c, label: c, sub: CUR_NAMES[c] })) }); if (v) St.setPrefs({ currency: v }); }
+  else if (k === "currency") { const v = await pickList({ title: "Default currency", value: P.currency, search: true, options: CURRENCIES.map(c => ({ value: c, label: c, sub: CUR_NAMES[c] })) }); if (v) { St.setPrefs({ currency: v }); (await import("./currency.js")).forgetTrip(); } }
   else if (k === "upi") { const v = await promptBox({ title: "Your UPI ID", label: "e.g. name@okaxis", value: P.upi, placeholder: "yourname@bank" }); if (v !== null) { if (v.trim() && !/^[\w.\-]{2,}@[a-z]{2,}$/i.test(v.trim())) toast("That doesn't look like a UPI ID (name@bank)"); else St.setPrefs({ upi: v.trim() }); } }
   else if (k === "name") { const v = await promptBox({ title: "Your name", value: P.name || Api.user?.username || "" }); if (v !== null) St.setPrefs({ name: v.trim() }); }
   else if (k === "rates") {

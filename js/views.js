@@ -28,10 +28,10 @@ export function home() {
   let budget = "";
   if (P.budget > 0) {
     const left = P.budget - month, pct = Math.min(100, month / P.budget * 100);
-    budget = `<div class="hbar${left < 0 ? " over" : pct > 85 ? " warn" : ""}" role="progressbar" aria-label="Budget used ${per.name}" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="--w:${pct}%"></i></div>
+    budget = `<button type="button" class="hero-budget" data-act="qbudget" aria-label="Change budget"><div class="hbar${left < 0 ? " over" : pct > 85 ? " warn" : ""}" role="progressbar" aria-label="Budget used ${per.name}" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="--w:${pct}%"></i></div>
       <div class="hero-foot">${left >= 0 ? `<span><b>${moneyBig(left)}</b> left of ${moneyBig(P.budget)}</span>${per.kind !== "day" && daysLeft > 1 ? `<span><b>${moneyBig(Math.floor(left / daysLeft))}</b>/day for ${plural(daysLeft, "day")}</span>` : ""}`
-        : `<span><b>${moneyBig(-left)}</b> over your ${moneyBig(P.budget)} budget</span>`}</div>`;
-  }
+        : `<span><b>${moneyBig(-left)}</b> over your ${moneyBig(P.budget)} budget</span>`}</div></button>`;
+  } else budget = `<button type="button" class="hero-set" data-act="qbudget">${I.plus}Set a budget</button>`;
   // per-category budgets
   const catSpent = {}; all.filter(inP).forEach(e => catSpent[e.cat] = (catSpent[e.cat] || 0) + St.mine(e));
   const cb = Object.entries(P.catBudgets || {}).filter(([, v]) => v > 0);
@@ -91,6 +91,7 @@ export function homeClick(ev) {
   if (q === "income") import("./income.js").then(m => m.openIncome());
   if (q === "scan") startScan(); else if (q === "manual") openForm(); else if (q === "distance") openForm({ type: "distance" }); else if (q === "split") openSplit();
   if (ev.target.closest("[data-act=budget]")) editBudget();
+  if (ev.target.closest("[data-act=qbudget]")) quickBudget();
 }
 /** Budgets: one overall monthly limit + optional limits per category */
 export async function editBudget() {
@@ -117,6 +118,24 @@ export async function editBudget() {
   };
 }
 
+/** Overall budget straight from Home: one amount + the period it covers */
+export function quickBudget() {
+  const P = St.prefs(), per = St.period();
+  const s = sheet({ title: "Your budget", sub: "How much you want to spend. Palli shows what's left on Home.", body: `
+    <label class="field"><span>Budget ${per.per}</span><div class="money"><input id="qbAmt" type="number" inputmode="numeric" min="0" step="500" value="${P.budget || ""}" placeholder="e.g. 40000" enterkeyhint="done"></div></label>
+    <button type="button" class="per-row" id="qbPer"><span>Budget period</span><b>${esc(St.PERIODS[per.kind] || "Monthly")}${per.kind === "cycle" || per.kind === "custom" ? ` · ${dShort(per.from)} – ${dShort(per.to)}` : ""}</b>${I.right}</button>
+    <button type="button" class="link" id="qbCats">${I.tag}Budgets for each category</button>`,
+    foot: `${P.budget ? `<button type="button" class="btn secondary" id="qbOff">Remove</button>` : ""}<button type="button" class="btn primary" id="qbOk">Save budget</button>` });
+  const amt = s.el.querySelector("#qbAmt");
+  const save = () => { const v = Math.round(parseFloat(amt.value)) || 0; St.setPrefs({ budget: v > 0 ? v : 0 }); s.close(); toast(v > 0 ? `Budget ${moneyBig(v)} ${per.per}` : "Budget removed"); };
+  s.el.querySelector("#qbOk").onclick = save;
+  amt.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); save(); } });
+  s.el.querySelector("#qbOff")?.addEventListener("click", () => { St.setPrefs({ budget: 0 }); s.close(); toast("Budget removed"); });
+  const then = (fn) => async () => { s.close(); const { whenSettled } = await import("./ui.js"); whenSettled(fn); };
+  s.el.querySelector("#qbPer").onclick = then(async () => { if (await pickPeriod()) quickBudget(); });
+  s.el.querySelector("#qbCats").onclick = then(() => editBudget());
+  setTimeout(() => amt.focus(), 60);
+}
 /** Settings: what time frame the Home card and budgets use */
 export async function pickPeriod() {
   const P = St.prefs(), cur = P.period?.kind || "month";

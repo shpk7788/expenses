@@ -664,3 +664,11 @@ code { background: var(--field); border-radius: 6px; padding: 1px 5px; font-size
 .in-sum b { font-size: clamp(.98rem, 4.4vw, 1.18rem); }
 .per-row { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--field); text-align: left; margin-bottom: 4px; }
 .per-row span { color: var(--muted); font-size: .88rem; } .per-row b { font-weight: 600; font-size: .92rem; } .per-row svg { width: 16px; height: 16px; color: var(--muted); }
+.hero-budget { display: block; width: 100%; text-align: left; color: inherit; padding: 0; border-radius: 10px; }
+.hero-set { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 10px; margin-left: -2px; border-radius: 99px; background: #ffffff14; color: #D5EFE3; font-size: .84rem; font-weight: 500; position: relative; }
+.hero-set svg { width: 14px; height: 14px; }
+.cur-chips { margin-top: 10px; }
+.cur-chip { height: 32px; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.cur-chip svg { width: 14px; height: 14px; }
+.cur-btn span { white-space: nowrap; }
+.amount-in.in .in-sign { font-size: 1.8rem; }
