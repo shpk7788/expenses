@@ -672,3 +672,4 @@ code { background: var(--field); border-radius: 6px; padding: 1px 5px; font-size
 .cur-chip svg { width: 14px; height: 14px; }
 .cur-btn span { white-space: nowrap; }
 .amount-in.in .in-sign { font-size: 1.8rem; }
+.fx-stale { flex-basis: 100%; color: var(--warn); font-size: .8rem; }

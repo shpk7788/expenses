@@ -4,7 +4,7 @@ import { CATS, cat, catFor, PAYS, CURRENCIES, CUR_NAMES, AUTO_FX, isDelivery, ra
 import * as St from "./store.js";
 import { sheet, toast, autocomplete, pickList, pickCategory, go, confirmBox, promptBox, whenSettled } from "./ui.js";
 import { Api } from "./api.js";
-import { compress, fxRate } from "./media.js";
+import { compress } from "./media.js";
 import { mountCurrency, startCur, rememberCur, sym } from "./currency.js";
 
 // ---------- + menu ----------

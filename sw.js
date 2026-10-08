@@ -1,6 +1,6 @@
 // Offline support: network first (always fresh when online), cache as fallback.
-const CACHE = "palli-v10.2";
-const FILES = ["./", "index.html", "css/app.css?v=12", "config.js?v=12", "stores.js?v=12", "receipt.js?v=12", "js/main.js?v=12",
+const CACHE = "palli-v10.3";
+const FILES = ["./", "index.html", "css/app.css?v=13", "config.js?v=13", "stores.js?v=13", "receipt.js?v=13", "js/main.js?v=13",
   "js/util.js", "js/cats.js", "js/api.js", "js/media.js", "js/store.js", "js/ui.js", "js/create.js", "js/views.js", "js/views2.js", "js/importer.js", "js/importview.js", "js/income.js", "js/currency.js",
   "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-192.png"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));

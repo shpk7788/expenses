@@ -1,8 +1,8 @@
 // Currency picking for the expense and money-in sheets: quick chips for the currencies you use, auto rate to ₹.
-import { esc, money, today, I } from "./util.js";
+import { esc, money, today, dShort, I } from "./util.js";
 import { CURRENCIES, CUR_NAMES, AUTO_FX } from "./cats.js";
 import { pickList } from "./ui.js";
-import { fxRate } from "./media.js";
+import { fxRateInfo } from "./media.js";
 
 // "HK$", "CN¥", "A$" — never a bare "$" that could be mistaken for US dollars
 export const sym = (c) => { try { const v = new Intl.NumberFormat("en", { style: "currency", currency: c, currencyDisplay: "symbol" }).formatToParts(0).find(p => p.type === "currency").value; return v === c ? `${c} ` : v; } catch { return `${c} `; } };
@@ -36,12 +36,13 @@ export function mountCurrency({ btn, chips, conv, amt, dateInput, state, onChang
     conv.hidden = false;
     if (fetchRate || !state.rate) {
       conv.innerHTML = `<span>Getting the ${esc(state.cur)} → ₹ rate…</span>`;
-      const asked = state.cur, r = AUTO_FX.has(asked) ? await fxRate(asked, dateInput?.value || today()) : null;
+      const asked = state.cur, info = AUTO_FX.has(asked) ? await fxRateInfo(asked, dateInput?.value || today()) : { rate: null };
       if (asked !== state.cur) return;   // switched again meanwhile
-      if (r) state.rate = r;
+      if (info.rate) state.rate = info.rate;
+      state.stale = info.rate && info.stale ? info.stale : null;
     }
-    conv.innerHTML = `<span>≈ <b>${money(amount() * (state.rate || 0))}</b> at</span><input id="fRate" class="fx-rate" type="number" inputmode="decimal" step="0.0001" min="0" value="${state.rate ? +(+state.rate).toFixed(4) : ""}" placeholder="rate" aria-label="Exchange rate to rupees"><span>₹ per ${esc(state.cur)}${!state.rate ? " — enter the rate" : ""}</span>`;
-    conv.querySelector(".fx-rate").oninput = (ev) => { state.rate = parseFloat(ev.target.value) || null; conv.querySelector("b").textContent = money(amount() * (state.rate || 0)); onChange?.(state.cur, state.rate); };
+    conv.innerHTML = `<span>≈ <b>${money(amount() * (state.rate || 0))}</b> at</span><input id="fRate" class="fx-rate" type="number" inputmode="decimal" step="0.0001" min="0" value="${state.rate ? +(+state.rate).toFixed(4) : ""}" placeholder="rate" aria-label="Exchange rate to rupees"><span>₹ per ${esc(state.cur)}${!state.rate ? (AUTO_FX.has(state.cur) ? " — couldn't get today's rate, enter it" : " — enter the rate") : ""}</span>${state.stale ? `<small class="fx-stale">No connection — using your last ${esc(state.cur)} rate (${esc(dShort(state.stale))}). Edit it if needed.</small>` : ""}`;
+    conv.querySelector(".fx-rate").oninput = (ev) => { conv.querySelector(".fx-stale")?.remove(); state.rate = parseFloat(ev.target.value) || null; conv.querySelector("b").textContent = money(amount() * (state.rate || 0)); onChange?.(state.cur, state.rate); };
     onChange?.(state.cur, state.rate);
   };
   const setCur = (c) => { if (!c || c === state.cur) return; state.cur = c; state.rate = null; drawBtn(); drawChips(); onChange?.(c, null); drawConv(true); };

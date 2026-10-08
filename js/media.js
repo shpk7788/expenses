@@ -38,18 +38,25 @@ export async function compress(file, max = 1600) {
 }
 
 // ---- FX: rate to convert 1 unit of `cur` into INR on `date` ----
-export async function fxRate(cur, date) {
-  if (cur === "INR") return 1;
+// Gives up after ~4 s in total (patchy roaming data), then falls back to the last rate this phone saw for that currency.
+export async function fxRateInfo(cur, date, { budget = 4000 } = {}) {
+  if (cur === "INR") return { rate: 1 };
   const key = `exp:fx:${cur}:${date}`;
-  try { const c = localStorage.getItem(key); if (c) return +c; } catch {}
-  const t = new Date().toISOString().slice(0, 10), d = date > t ? "latest" : date;
+  try { const c = localStorage.getItem(key); if (c) return { rate: +c }; } catch {}
+  const t = new Date().toISOString().slice(0, 10), d = date > t ? "latest" : date, until = Date.now() + budget;
   for (const base of ["https://api.frankfurter.dev/v1/", "https://api.frankfurter.app/"]) {
+    const left = until - Date.now(); if (left < 300) break;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), left);
     try {
-      const res = await fetch(`${base}${d}?from=${cur}&to=INR`);
+      const res = await fetch(`${base}${d}?from=${cur}&to=INR`, { signal: ctl.signal });
       if (!res.ok) continue;
       const j = await res.json(), r = j?.rates?.INR;
-      if (r) { try { localStorage.setItem(key, String(r)); } catch {} return r; }
-    } catch {}
+      if (r) { try { localStorage.setItem(key, String(r)); } catch {} return { rate: r }; }
+    } catch {} finally { clearTimeout(timer); }
   }
-  return null;
+  // offline / too slow: newest rate we already have for this currency
+  let best = null;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^exp:fx:([A-Z]{3}):(\d{4}-\d{2}-\d{2})$/.exec(k || ""); if (m && m[1] === cur && (!best || m[2] > best.date)) best = { date: m[2], rate: +localStorage.getItem(k) }; } } catch {}
+  return best ? { rate: best.rate, stale: best.date } : { rate: null };
 }
+export const fxRate = async (cur, date) => (await fxRateInfo(cur, date)).rate;
